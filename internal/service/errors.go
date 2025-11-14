@@ -19,7 +19,7 @@ type Error struct {
 	Message string    `json:"message"`
 }
 
-func NewServiceError(code ErrorCode, message string) *Error {
+func NewError(code ErrorCode, message string) *Error {
 	return &Error{
 		Code:    code,
 		Message: message,
