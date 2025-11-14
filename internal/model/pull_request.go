@@ -25,21 +25,3 @@ type PullRequestShort struct {
 	AuthorID string   `json:"author_id" validate:"required"`
 	Status   PRStatus `json:"status" validate:"required"`
 }
-
-func PullRequestToShort(pr *PullRequest) *PullRequestShort {
-	return &PullRequestShort{
-		ID:       pr.ID,
-		Name:     pr.Name,
-		AuthorID: pr.AuthorID,
-		Status:   pr.Status,
-	}
-}
-
-func ShortToPullRequest(pr *PullRequestShort) *PullRequest {
-	return &PullRequest{
-		ID:       pr.ID,
-		Name:     pr.Name,
-		AuthorID: pr.AuthorID,
-		Status:   pr.Status,
-	}
-}

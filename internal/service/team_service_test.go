@@ -82,14 +82,12 @@ func TestTeamService_GetTeam(t *testing.T) {
 
 			if tt.expectedError {
 				assert.Error(t, err)
-				serviceErr := &Error{}
-				if errors.As(err, &serviceErr) {
-					assert.Equal(t, tt.errorCode, serviceErr.Code)
-				}
+				assert.Equal(t, tt.errorCode, err.Code)
 				assert.Nil(t, got)
 			} else {
-				assert.NoError(t, err)
+				assert.Nil(t, err)
 				assert.Equal(t, tt.expectedTeam, got)
+				assert.NotNil(t, got)
 			}
 
 			mockTeamRepo.AssertExpectations(t)
@@ -168,12 +166,9 @@ func TestTeamService_AddTeam(t *testing.T) {
 
 			if tt.expectedError {
 				assert.Error(t, err)
-				serviceErr := &Error{}
-				if errors.As(err, &serviceErr) {
-					assert.Equal(t, tt.errorCode, serviceErr.Code, "unexpected error code", serviceErr.Code)
-				}
+				assert.Equal(t, tt.errorCode, err.Code)
 			} else {
-				assert.NoError(t, err)
+				assert.Nil(t, err)
 			}
 
 			mockTeamRepo.AssertExpectations(t)

@@ -12,7 +12,7 @@ func WithLogger(ctx context.Context, logger *zap.Logger) context.Context {
 }
 
 func FromContext(ctx context.Context) *zap.Logger {
-	if logger, ok := ctx.Value(loggerContextKey{}).(*zap.Logger); !ok {
+	if logger, ok := ctx.Value(loggerContextKey{}).(*zap.Logger); ok {
 		return logger
 	}
 	return zap.NewNop()

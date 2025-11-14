@@ -266,6 +266,7 @@ func (p *PullRequestService) CreatePullRequest(ctx context.Context, short *model
 		pr.Status = repoPR.Status
 		pr.AuthorID = repoPR.AuthorID
 		pr.Reviewers = reviewers
+		pr.ID = repoPR.ID
 
 		return nil
 	})

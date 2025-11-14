@@ -10,29 +10,31 @@ import (
 	"github.com/yakoovad/avito-winter-2025/internal/service"
 	"github.com/yakoovad/avito-winter-2025/pkg/logger"
 	"go.uber.org/zap"
+	"log"
 )
 
 func main() {
-	// Инициализируем logger
-	logger, err := logger.NewLogger()
+	l, err := logger.NewLogger()
 	if err != nil {
-		panic(err)
+		log.Fatal("failed to initialize logger: ", err)
 	}
-	defer logger.Sync()
+	defer func() {
+		_ = l.Sync()
+	}()
 
-	logger.Info("starting application")
+	l.Info("starting application")
 
 	pool, err := pgxpool.New(context.Background(), "postgres://postgres:postgres@localhost:5432/avito_test?sslmode=disable")
 	if err != nil {
-		logger.Fatal("failed to connect to database", zap.Error(err))
+		l.Fatal("failed to connect to database", zap.Error(err))
 	}
 	defer pool.Close()
 
 	if err = pool.Ping(context.Background()); err != nil {
-		logger.Fatal("failed to ping database", zap.Error(err))
+		l.Fatal("failed to ping database", zap.Error(err))
 	}
 
-	logger.Info("database connection established")
+	l.Info("database connection established")
 
 	transactor := db.NewPgxTransactor(pool)
 
@@ -47,12 +49,12 @@ func main() {
 
 	e := echo.New()
 
-	handler := api.NewHandler(logger).WithTeamService(team).WithUserService(user).WithPullRequestService(pr)
+	handler := api.NewHandler(l).WithTeamService(team).WithUserService(user).WithPullRequestService(pr)
 
 	handler.RegisterRoutes(e)
 
-	logger.Info("server starting on :8080")
+	l.Info("server starting on :8080")
 	if err = e.Start(":8080"); err != nil {
-		logger.Fatal("failed to start server", zap.Error(err))
+		l.Fatal("failed to start server", zap.Error(err))
 	}
 }

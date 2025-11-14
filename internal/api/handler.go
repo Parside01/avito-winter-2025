@@ -82,6 +82,7 @@ func (h *Handler) ReassignPullRequest(e echo.Context) error {
 	}
 
 	if err := h.decodeRequest(e, &req); err != nil {
+		logger.Error("invalid request", zap.Any("error", err))
 		return h.transportError(e, err)
 	}
 
@@ -109,6 +110,7 @@ func (h *Handler) MergePullRequest(e echo.Context) error {
 	}
 
 	if err := h.decodeRequest(e, &req); err != nil {
+		logger.Error("invalid request", zap.Any("error", err))
 		return h.transportError(e, err)
 	}
 
@@ -133,6 +135,7 @@ func (h *Handler) CreatePullRequest(e echo.Context) error {
 	}
 
 	if err := h.decodeRequest(e, &req); err != nil {
+		logger.Error("invalid request", zap.Any("error", err))
 		return h.transportError(e, err)
 	}
 
@@ -167,6 +170,7 @@ func (h *Handler) SetUserIsActive(e echo.Context) error {
 	}
 
 	if err := h.decodeRequest(e, &req); err != nil {
+		logger.Error("invalid request", zap.Any("error", err))
 		return h.transportError(e, err)
 	}
 
@@ -191,6 +195,7 @@ func (h *Handler) AddTeam(e echo.Context) error {
 	team := &model.Team{}
 
 	if err := h.decodeRequest(e, &team); err != nil {
+		logger.Error("invalid request", zap.Any("error", err))
 		return h.transportError(e, err)
 	}
 
