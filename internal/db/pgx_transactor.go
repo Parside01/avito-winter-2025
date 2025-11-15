@@ -2,10 +2,16 @@ package db
 
 import (
 	"context"
-	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/pkg/errors"
 )
+
+// Transactor allows you to run queries from repositories within a transaction
+type Transactor interface {
+	WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) error
+	Ping(ctx context.Context) error
+}
 
 type TxContextKey struct{}
 
@@ -17,10 +23,14 @@ func NewPgxTransactor(pool *pgxpool.Pool) Transactor {
 	return &pgxTransactor{pool: pool}
 }
 
+func (t *pgxTransactor) Ping(ctx context.Context) error {
+	return t.pool.Ping(ctx)
+}
+
 func (t *pgxTransactor) WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) error {
 	tx, err := t.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return errors.Wrap(err, "failed to begin transaction")
 	}
 
 	defer func() {
@@ -33,11 +43,11 @@ func (t *pgxTransactor) WithinTransaction(ctx context.Context, fn func(ctx conte
 
 	if err = fn(ctxWithTx); err != nil {
 		// The transaction will be rolled back in the deferred function
-		return fmt.Errorf("transaction function failed: %w", err)
+		return errors.Wrap(err, "transaction function failed")
 	}
 
 	if err = tx.Commit(ctx); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return errors.Wrap(err, "failed to commit transaction")
 	}
 
 	return nil

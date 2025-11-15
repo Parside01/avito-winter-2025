@@ -12,6 +12,7 @@ const (
 	ErrorCodeUnspecified  ErrorCode = "UNSPECIFIED"
 	ErrorCodeInvalidBody  ErrorCode = "INVALID_BODY"
 	ErrorCodeUserInactive ErrorCode = "USER_INACTIVE"
+	ErrorCodeUnauthorized ErrorCode = "UNAUTHORIZED"
 )
 
 type Error struct {

@@ -9,6 +9,9 @@ NeedMoreReviewers bool     `json:"need_more_reviewers" db:"need_more_reviewers"`
 ### Неактивный пользователь
 Неактивный пользователь не может создать PR.
 
+### Эндпоинт `/team/add`
+Добавлено security: Admin
+
 ### Эндпоинт `/users/getReview`
 Не возвращает `NotFound` при передаче несуществующего пользователя, так как для этого потребовалось бы:
 1. JOIN с таблицей пользователей

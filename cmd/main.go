@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"github.com/hellofresh/health-go/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
 	"github.com/yakoovad/avito-winter-2025/internal/api"
@@ -11,6 +12,7 @@ import (
 	"github.com/yakoovad/avito-winter-2025/pkg/logger"
 	"go.uber.org/zap"
 	"log"
+	"time"
 )
 
 func main() {
@@ -43,18 +45,43 @@ func main() {
 	userRepo := repository.NewPgxUserRepository(pool)
 	reviewRepo := repository.NewPgxReviewRepository(pool)
 
-	team := service.NewTeamService(transactor).WithTeamRepo(teamRepo).WithUserRepo(userRepo).WithReviewRepo(reviewRepo)
-	user := service.NewUserService(transactor).WithUserRepo(userRepo).WithTeamRepo(teamRepo).WithReviewRepo(reviewRepo)
-	pr := service.NewPullRequestService(transactor).WithPullRequestRepo(prRepo).WithTeamRepo(teamRepo).WithUserRepo(userRepo).WithReviewRepo(reviewRepo)
+	team := service.NewTeamService(transactor).
+		WithTeamRepo(teamRepo).
+		WithUserRepo(userRepo).
+		WithReviewRepo(reviewRepo)
+
+	user := service.NewUserService(transactor).
+		WithUserRepo(userRepo).
+		WithTeamRepo(teamRepo).
+		WithReviewRepo(reviewRepo)
+
+	pr := service.NewPullRequestService(transactor).
+		WithPullRequestRepo(prRepo).
+		WithTeamRepo(teamRepo).
+		WithUserRepo(userRepo).
+		WithReviewRepo(reviewRepo)
 
 	e := echo.New()
 
-	handler := api.NewHandler(l).WithTeamService(team).WithUserService(user).WithPullRequestService(pr)
+	healthChecker := api.MustNewHealthChecker(
+		health.Config{
+			Name: "database",
+			Check: func(ctx context.Context) error {
+				return transactor.Ping(ctx)
+			},
+			Timeout: time.Second * 5,
+		},
+	)
+
+	handler := api.NewHandler(l).
+		WithTeamService(team).
+		WithUserService(user).
+		WithPullRequestService(pr).
+		WithHealthChecker(healthChecker)
 
 	handler.RegisterRoutes(e)
 
-	l.Info("server starting on :8080")
 	if err = e.Start(":8080"); err != nil {
-		l.Fatal("failed to start server", zap.Error(err))
+		l.Fatal("fatal server error", zap.Error(err))
 	}
 }

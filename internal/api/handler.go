@@ -4,8 +4,10 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/pkg/errors"
+	"github.com/yakoovad/avito-winter-2025/internal/auth"
 	"github.com/yakoovad/avito-winter-2025/internal/model"
 	"github.com/yakoovad/avito-winter-2025/internal/service"
+	"github.com/yakoovad/avito-winter-2025/pkg/logger"
 	"go.uber.org/zap"
 	"net/http"
 )
@@ -15,6 +17,8 @@ type Handler struct {
 	team *service.TeamService
 	user *service.UserService
 
+	healthChecker HealthChecker
+
 	logger *zap.Logger
 }
 
@@ -22,6 +26,11 @@ func NewHandler(logger *zap.Logger) *Handler {
 	return &Handler{
 		logger: logger,
 	}
+}
+
+func (h *Handler) WithHealthChecker(c HealthChecker) *Handler {
+	h.healthChecker = c
+	return h
 }
 
 func (h *Handler) WithTeamService(team *service.TeamService) *Handler {
@@ -46,27 +55,32 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORS())
 
-	e.POST("/team/add", h.AddTeam)
-	e.GET("/team/get", h.GetTeam)
+	e.GET("/health", h.healthChecker.HealthCheck())
 
-	e.POST("/user/setIsActive", h.SetUserIsActive)
-	e.GET("/users/getReview", h.GetUserReview)
+	userSecurity := e.Group("", AuthMiddleware(auth.TokenTypeUser, auth.TokenTypeAdmin))
 
-	e.POST("/pullRequest/create", h.CreatePullRequest)
-	e.POST("/pullRequest/merge", h.MergePullRequest)
-	e.POST("/pullRequest/reassign", h.ReassignPullRequest)
+	userSecurity.POST("/team/get", h.GetTeam)
+	userSecurity.GET("/users/getReview", h.GetUserReview)
+
+	adminSecurity := e.Group("", AuthMiddleware(auth.TokenTypeAdmin))
+
+	adminSecurity.POST("/team/add", h.AddTeam)
+	adminSecurity.POST("/users/setIsActive", h.SetUserIsActive)
+	adminSecurity.POST("/pullRequest/create", h.CreatePullRequest)
+	adminSecurity.POST("/pullRequest/merge", h.MergePullRequest)
+	adminSecurity.POST("/pullRequest/reassign", h.ReassignPullRequest)
 }
 
 func (h *Handler) GetUserReview(e echo.Context) error {
-	logger := GetLoggerFromContext(e)
+	l := logger.FromContext(e.Request().Context())
 
 	userID := e.QueryParam("user_id")
 
-	logger.Info("getting user reviews", zap.String("user_id", userID))
+	l.Info("getting user reviews", zap.String("user_id", userID))
 
 	reviews, err := h.pr.GetUserReview(e.Request().Context(), userID)
 	if err != nil {
-		logger.Error("failed to get user reviews", zap.String("user_id", userID), zap.Any("error", err))
+		l.Error("failed to get user reviews", zap.String("user_id", userID), zap.Any("error", err))
 		return h.transportError(e, err)
 	}
 
@@ -74,7 +88,7 @@ func (h *Handler) GetUserReview(e echo.Context) error {
 }
 
 func (h *Handler) ReassignPullRequest(e echo.Context) error {
-	logger := GetLoggerFromContext(e)
+	l := logger.FromContext(e.Request().Context())
 
 	var req struct {
 		ID     string `json:"pull_request_id" validate:"required"`
@@ -82,17 +96,17 @@ func (h *Handler) ReassignPullRequest(e echo.Context) error {
 	}
 
 	if err := h.decodeRequest(e, &req); err != nil {
-		logger.Error("invalid request", zap.Any("error", err))
+		l.Error("invalid request", zap.Any("error", err))
 		return h.transportError(e, err)
 	}
 
-	logger.Info("reassigning pull request",
+	l.Info("reassigning pull request",
 		zap.String("pr_id", req.ID),
 		zap.String("old_user_id", req.UserID))
 
 	pr, err := h.pr.ReassignPullRequest(e.Request().Context(), req.ID, req.UserID)
 	if err != nil {
-		logger.Error("failed to reassign pull request",
+		l.Error("failed to reassign pull request",
 			zap.String("pr_id", req.ID),
 			zap.String("old_user_id", req.UserID),
 			zap.Any("error", err))
@@ -103,22 +117,22 @@ func (h *Handler) ReassignPullRequest(e echo.Context) error {
 }
 
 func (h *Handler) MergePullRequest(e echo.Context) error {
-	logger := GetLoggerFromContext(e)
+	l := logger.FromContext(e.Request().Context())
 
 	var req struct {
 		ID string `json:"pull_request_id" validate:"required"`
 	}
 
 	if err := h.decodeRequest(e, &req); err != nil {
-		logger.Error("invalid request", zap.Any("error", err))
+		l.Error("invalid request", zap.Any("error", err))
 		return h.transportError(e, err)
 	}
 
-	logger.Info("merging pull request", zap.String("pr_id", req.ID))
+	l.Info("merging pull request", zap.String("pr_id", req.ID))
 
 	pr, err := h.pr.MergePullRequest(e.Request().Context(), req.ID)
 	if err != nil {
-		logger.Error("failed to merge pull request", zap.String("pr_id", req.ID), zap.Any("error", err))
+		l.Error("failed to merge pull request", zap.String("pr_id", req.ID), zap.Any("error", err))
 		return h.transportError(e, err)
 	}
 
@@ -126,7 +140,7 @@ func (h *Handler) MergePullRequest(e echo.Context) error {
 }
 
 func (h *Handler) CreatePullRequest(e echo.Context) error {
-	logger := GetLoggerFromContext(e)
+	l := logger.FromContext(e.Request().Context())
 
 	var req struct {
 		ID       string `json:"pull_request_id" validate:"required"`
@@ -135,11 +149,11 @@ func (h *Handler) CreatePullRequest(e echo.Context) error {
 	}
 
 	if err := h.decodeRequest(e, &req); err != nil {
-		logger.Error("invalid request", zap.Any("error", err))
+		l.Error("invalid request", zap.Any("error", err))
 		return h.transportError(e, err)
 	}
 
-	logger.Info("creating pull request",
+	l.Info("creating pull request",
 		zap.String("pr_id", req.ID),
 		zap.String("pr_name", req.Name),
 		zap.String("author_id", req.AuthorID))
@@ -152,7 +166,7 @@ func (h *Handler) CreatePullRequest(e echo.Context) error {
 
 	pr, err := h.pr.CreatePullRequest(e.Request().Context(), short)
 	if err != nil {
-		logger.Error("failed to create pull request",
+		l.Error("failed to create pull request",
 			zap.String("pr_id", req.ID),
 			zap.Any("error", err))
 		return h.transportError(e, err)
@@ -162,7 +176,7 @@ func (h *Handler) CreatePullRequest(e echo.Context) error {
 }
 
 func (h *Handler) SetUserIsActive(e echo.Context) error {
-	logger := GetLoggerFromContext(e)
+	l := logger.FromContext(e.Request().Context())
 
 	var req struct {
 		UserID   string `json:"user_id" validate:"required"`
@@ -170,17 +184,17 @@ func (h *Handler) SetUserIsActive(e echo.Context) error {
 	}
 
 	if err := h.decodeRequest(e, &req); err != nil {
-		logger.Error("invalid request", zap.Any("error", err))
+		l.Error("invalid request", zap.Any("error", err))
 		return h.transportError(e, err)
 	}
 
-	logger.Info("setting user active status",
+	l.Info("setting user active status",
 		zap.String("user_id", req.UserID),
 		zap.Bool("is_active", req.IsActive))
 
 	user, err := h.user.SetUserIsActive(e.Request().Context(), req.UserID, req.IsActive)
 	if err != nil {
-		logger.Error("failed to set user active status",
+		l.Error("failed to set user active status",
 			zap.String("user_id", req.UserID),
 			zap.Any("error", err))
 		return h.transportError(e, err)
@@ -190,19 +204,19 @@ func (h *Handler) SetUserIsActive(e echo.Context) error {
 }
 
 func (h *Handler) AddTeam(e echo.Context) error {
-	logger := GetLoggerFromContext(e)
+	l := logger.FromContext(e.Request().Context())
 
 	team := &model.Team{}
 
 	if err := h.decodeRequest(e, &team); err != nil {
-		logger.Error("invalid request", zap.Any("error", err))
+		l.Error("invalid request", zap.Any("error", err))
 		return h.transportError(e, err)
 	}
 
-	logger.Info("adding team", zap.String("team_name", team.Name))
+	l.Info("adding team", zap.String("team_name", team.Name))
 
 	if err := h.team.AddTeam(e.Request().Context(), team); err != nil {
-		logger.Error("failed to add team", zap.String("team_name", team.Name), zap.Any("error", err))
+		l.Error("failed to add team", zap.String("team_name", team.Name), zap.Any("error", err))
 		return h.transportError(e, err)
 	}
 
@@ -210,15 +224,15 @@ func (h *Handler) AddTeam(e echo.Context) error {
 }
 
 func (h *Handler) GetTeam(e echo.Context) error {
-	logger := GetLoggerFromContext(e)
+	l := logger.FromContext(e.Request().Context())
 
 	teamName := e.QueryParam("team_name")
 
-	logger.Info("getting team", zap.String("team_name", teamName))
+	l.Info("getting team", zap.String("team_name", teamName))
 
 	team, err := h.team.GetTeam(e.Request().Context(), teamName)
 	if err != nil {
-		logger.Error("failed to get team", zap.String("team_name", teamName), zap.Any("error", err))
+		l.Error("failed to get team", zap.String("team_name", teamName), zap.Any("error", err))
 		return h.transportError(e, err)
 	}
 
