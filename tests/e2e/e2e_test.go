@@ -64,22 +64,14 @@ func recordMetricSuccess(endpoint string, success bool) {
 	m.Total++
 }
 func printMetrics(t *testing.T) {
-	t.Log("--- http metrics (avg ms) ---")
-	for ep, m := range httpMetrics.data {
-		if m.Count == 0 {
-			continue
-		}
-		avg := float64(m.Total) / float64(m.Count)
-		t.Logf("endpoint=%s count=%d avg=%.1fms", ep, m.Count, avg)
-	}
-
-	t.Log("--- SLI success rate ---")
+	t.Log("--- METRICS ---")
 	for ep, m := range sliSuccess.data {
 		if m.Total == 0 {
 			continue
 		}
+		avg := float64(httpMetrics.data[ep].Count) / float64(httpMetrics.data[ep].Count)
 		successRate := (float64(m.Count) / float64(m.Total)) * 100.0
-		t.Logf("endpoint=%s success=%d total=%d success_rate=%.2f%%", ep, m.Count, m.Total, successRate)
+		t.Logf("endpoint=%s success=%d total=%d success_rate=%.2f%%, avg_time=%.2f%%ms", ep, m.Count, m.Total, successRate, avg)
 	}
 }
 
@@ -367,5 +359,4 @@ func doJSONRequest(t *testing.T, method, url, token string, body any) {
 	}
 	recordMetricSuccess(req.URL.Path, resp.StatusCode < 400)
 	t.Logf("%s request to %s, time: %d ms", method, url, time.Since(start).Milliseconds())
-	return
 }
