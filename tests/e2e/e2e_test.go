@@ -172,53 +172,57 @@ func TestEndToEnd(t *testing.T) {
 		requestsPerWorker = 200
 	)
 
-	t.Run("deactivate members load test", func(t *testing.T) {
+	t.Run("e2e test", func(t *testing.T) {
 		t.Parallel()
-		runDeactivateMembersLoadTest(
-			t,
-			baseUrl,
-			token,
-			allTeams,
-			teamUsers,
-			numWorkers,
-			requestsPerWorker,
-		)
-	})
 
-	t.Run("get team load test", func(t *testing.T) {
-		t.Parallel()
-		runGetTeamLoadTest(
-			t,
-			baseUrl,
-			token,
-			allTeams,
-			numWorkers,
-			requestsPerWorker,
-		)
-	})
+		t.Run("deactivate members load test", func(t *testing.T) {
+			t.Parallel()
+			runDeactivateMembersLoadTest(
+				t,
+				baseUrl,
+				token,
+				allTeams,
+				teamUsers,
+				numWorkers,
+				requestsPerWorker,
+			)
+		})
 
-	t.Run("get user review load test", func(t *testing.T) {
-		t.Parallel()
-		runGetUserReviewLoadTest(
-			t,
-			baseUrl,
-			token,
-			teamUsers,
-			numWorkers,
-			requestsPerWorker,
-		)
-	})
+		t.Run("get team load test", func(t *testing.T) {
+			t.Parallel()
+			runGetTeamLoadTest(
+				t,
+				baseUrl,
+				token,
+				allTeams,
+				numWorkers,
+				requestsPerWorker,
+			)
+		})
 
-	t.Run("reassign pull request load test", func(t *testing.T) {
-		t.Parallel()
-		runReassignPRLoadTest(
-			t,
-			baseUrl,
-			token,
-			userPRs,
-			numWorkers,
-			requestsPerWorker,
-		)
+		t.Run("get user review load test", func(t *testing.T) {
+			t.Parallel()
+			runGetUserReviewLoadTest(
+				t,
+				baseUrl,
+				token,
+				teamUsers,
+				numWorkers,
+				requestsPerWorker,
+			)
+		})
+
+		t.Run("reassign pull request load test", func(t *testing.T) {
+			t.Parallel()
+			runReassignPRLoadTest(
+				t,
+				baseUrl,
+				token,
+				userPRs,
+				numWorkers,
+				requestsPerWorker,
+			)
+		})
 	})
 }
 
