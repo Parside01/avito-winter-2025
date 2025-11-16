@@ -341,7 +341,7 @@ func doJSONRequest(t *testing.T, method, url, token string, body any) {
 
 	resp, err := http.DefaultClient.Do(req)
 	elapsed := time.Since(start).Milliseconds()
-	recordMetric(url, elapsed)
+	recordMetric(req.URL.Path, elapsed)
 
 	if err != nil {
 		t.Errorf("request failed: %v", err)
@@ -362,10 +362,10 @@ func doJSONRequest(t *testing.T, method, url, token string, body any) {
 		} else {
 			t.Errorf("request to %s failed: %s, body: %s", url, resp.Status, b.String())
 		}
-		recordMetricSuccess(url, false)
+		recordMetricSuccess(req.URL.Path, false)
 		return
 	}
-	recordMetricSuccess(url, resp.StatusCode < 400)
+	recordMetricSuccess(req.URL.Path, resp.StatusCode < 400)
 	t.Logf("%s request to %s, time: %d ms", method, url, time.Since(start).Milliseconds())
 	return
 }
