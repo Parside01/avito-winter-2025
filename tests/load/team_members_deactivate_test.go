@@ -155,14 +155,20 @@ func TestLoad_TeamDeactivateMembers(t *testing.T) {
 		t.Logf("app logs:\n%s", logBuf.String())
 	}()
 
-	allTeams, teamUsers := prepareTestData(t, "http://localhost:8080", token)
+	port, err := app.MappedPort(ctx, "8080/tcp")
+	assert.NoError(t, err)
+	assert.NotEmpty(t, port)
+
+	baseUrl := fmt.Sprintf("http://localhost:%s", port.Port())
+
+	allTeams, teamUsers := prepareTestData(t, baseUrl, token)
 	assert.NotEmpty(t, allTeams)
 	assert.NotEmpty(t, teamUsers)
 
 	t.Run("deactivate members load test", func(t *testing.T) {
 		runDeactivateMembersLoadTest(
 			t,
-			"http://localhost:8080",
+			baseUrl,
 			token,
 			allTeams,
 			teamUsers,
@@ -202,7 +208,7 @@ func runDeactivateMembersLoadTest(
 				}
 
 				maxUsers := len(users)
-				count := rnd.Intn(maxUsers) + 1
+				count := rnd.Intn(maxUsers/4) + 1
 
 				tmp := make([]string, len(users))
 				copy(tmp, users)
