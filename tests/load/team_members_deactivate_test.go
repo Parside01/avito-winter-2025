@@ -42,8 +42,6 @@ func TestLoad_TeamDeactivateMembers(t *testing.T) {
 		t.Fatalf("failed to create compose stack: %v", err)
 	}
 
-	stack.WaitForService("app", wait.ForHealthCheck())
-
 	t.Cleanup(func() {
 		err = stack.Down(
 			context.Background(),
@@ -55,6 +53,9 @@ func TestLoad_TeamDeactivateMembers(t *testing.T) {
 			t.Fatalf("failed to tear down compose stack: %v", err)
 		}
 	})
+
+	stack.WaitForService("postgres", wait.ForHealthCheck())
+	stack.WaitForService("app", wait.ForHealthCheck())
 
 	if err = stack.Up(ctx); err != nil {
 		t.Fatalf("failed to start compose stack: %v", err)
@@ -83,6 +84,14 @@ func TestLoad_TeamDeactivateMembers(t *testing.T) {
 	}, token)
 
 	assert.NotEmpty(t, token)
+
+	defer func() {
+		goLogs, _ := app.Logs(ctx)
+		assert.NoError(t, err)
+		var logBuf bytes.Buffer
+		_, _ = logBuf.ReadFrom(goLogs)
+		t.Logf("app logs:\n%s", logBuf.String())
+	}()
 
 	allTeams, teamUsers := prepareTestData(t, "http://localhost:8080", token)
 	assert.NotEmpty(t, allTeams)
@@ -192,7 +201,7 @@ func doJSONRequest(t *testing.T, method, url, token string, body any) *http.Resp
 		t.Fatalf("failed to create request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	t.Logf("Making %s request to %s, with token %s", method, url, token)
+	t.Logf("Making %s request to %s", method, url)
 	req.Header.Set("X-Api-Key", token)
 
 	resp, err := http.DefaultClient.Do(req)
