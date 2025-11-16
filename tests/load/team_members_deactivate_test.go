@@ -69,7 +69,7 @@ func printMetrics(t *testing.T) {
 		t.Logf("endpoint=%s count=%d avg=%.1fms", ep, m.Count, avg)
 	}
 
-	t.Log("--- SLI Success Rate ---")
+	t.Log("--- SLI success rate ---")
 	for ep, m := range sliSuccess.data {
 		if m.Total == 0 {
 			continue
@@ -354,7 +354,7 @@ func doJSONRequest(t *testing.T, method, url, token string, body any) *http.Resp
 		t.Errorf("request to %s failed: %s, body: %s", url, resp.Status, b.String())
 		return nil
 	}
-	recordMetricSuccess(url, resp.StatusCode >= 400)
+	recordMetricSuccess(url, resp.StatusCode < 400)
 	t.Logf("Success %s request to %s, time: %d ms", method, url, time.Since(start).Milliseconds())
 	return resp
 }
