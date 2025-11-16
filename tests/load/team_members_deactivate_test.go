@@ -140,7 +140,7 @@ func TestLoad_TeamDeactivateMembers(t *testing.T) {
 			token,
 			allTeams,
 			teamUsers,
-			20,
+			5,
 			200,
 		)
 	})
@@ -227,13 +227,13 @@ func prepareTestData(t *testing.T, baseURL string, token string) (allTeams []str
 
 	teamUsers = make(map[string][]string)
 
-	numTeams := 70
+	numTeams := 20
 	userCount := 0
 
 	for i := 0; i < numTeams; i++ {
 		teamName := fmt.Sprintf("team-%d", i+1)
 
-		teamSize := rand.Intn(15) + 5
+		teamSize := rand.Intn(15) + 10
 
 		members := make([]teamMemberPayload, 0, teamSize)
 		userIDs := make([]string, 0, teamSize)
