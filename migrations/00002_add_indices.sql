@@ -6,5 +6,6 @@ CREATE INDEX idx_pr_status ON pull_request(status) WHERE status = 'OPEN';
 
 -- +goose Down
 -- +goose StatementBegin
-SELECT 'down SQL query';
+DROP INDEX IF EXISTS idx_review_pr_user;
+DROP INDEX IF EXISTS idx_pr_status;
 -- +goose StatementEnd

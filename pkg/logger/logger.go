@@ -5,5 +5,5 @@ import (
 )
 
 func NewLogger() (*zap.Logger, error) {
-	return zap.NewProduction(zap.IncreaseLevel(zap.InfoLevel))
+	return zap.NewProduction(zap.IncreaseLevel(zap.WarnLevel))
 }
