@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 	"unicode"
@@ -131,6 +132,84 @@ func TestLoad_TeamDeactivateMembers(t *testing.T) {
 	allTeams, teamUsers := prepareTestData(t, "http://localhost:8080", token)
 	assert.NotEmpty(t, allTeams)
 	assert.NotEmpty(t, teamUsers)
+
+	t.Run("deactivate members load test", func(t *testing.T) {
+		runDeactivateMembersLoadTest(
+			t,
+			"http://localhost:8080",
+			token,
+			allTeams,
+			teamUsers,
+			20,
+			200,
+		)
+	})
+}
+
+func runDeactivateMembersLoadTest(
+	t *testing.T,
+	baseURL string,
+	token string,
+	allTeams []string,
+	teamUsers map[string][]string,
+	numWorkers int,
+	requestsPerWorker int,
+) {
+	t.Helper()
+
+	if numWorkers <= 0 {
+		numWorkers = 10
+	}
+	if requestsPerWorker <= 0 {
+		requestsPerWorker = 100
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(numWorkers)
+
+	for w := 0; w < numWorkers; w++ {
+		go func(workerID int) {
+			defer wg.Done()
+
+			rnd := rand.New(rand.NewSource(time.Now().UnixNano() + int64(workerID)))
+
+			for i := 0; i < requestsPerWorker; i++ {
+				teamIdx := rnd.Intn(len(allTeams))
+				teamName := allTeams[teamIdx]
+
+				users := teamUsers[teamName]
+				if len(users) == 0 {
+					continue
+				}
+
+				maxUsers := len(users)
+				count := rnd.Intn(maxUsers) + 1
+
+				tmp := make([]string, len(users))
+				copy(tmp, users)
+				rnd.Shuffle(len(tmp), func(i, j int) {
+					tmp[i], tmp[j] = tmp[j], tmp[i]
+				})
+
+				selected := tmp[:count]
+
+				reqBody := DeactivateMembersRequest{
+					Team:    teamName,
+					Members: selected,
+				}
+
+				doJSONRequest(
+					t,
+					http.MethodPost,
+					baseURL+"/team/deactivateMembers",
+					token,
+					reqBody,
+				)
+			}
+		}(w)
+	}
+
+	wg.Wait()
 }
 
 type teamMemberPayload struct {
