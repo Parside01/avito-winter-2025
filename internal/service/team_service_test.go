@@ -16,7 +16,7 @@ func TestTeamService_GetTeam(t *testing.T) {
 		teamName      string
 		setupMocks    func(*MockTeamRepository)
 		expectedError bool
-		errorCode     ErrorCode
+		errorCode     model.ErrorCode
 		expectedTeam  *model.Team
 	}{
 		{
@@ -45,7 +45,7 @@ func TestTeamService_GetTeam(t *testing.T) {
 				tr.On("Get", mock.Anything, "backend").Return(nil, repository.ErrNotFound)
 			},
 			expectedError: true,
-			errorCode:     ErrorCodeNotFound,
+			errorCode:     model.ErrorCodeNotFound,
 		},
 		{
 			name:     "get team failure",
@@ -54,7 +54,7 @@ func TestTeamService_GetTeam(t *testing.T) {
 				tr.On("Get", mock.Anything, "backend").Return(nil, errors.New("db error"))
 			},
 			expectedError: true,
-			errorCode:     ErrorCodeUnspecified,
+			errorCode:     model.ErrorCodeUnspecified,
 		},
 		{
 			name:     "get members failure",
@@ -64,7 +64,7 @@ func TestTeamService_GetTeam(t *testing.T) {
 				tr.On("GetTeamMembers", mock.Anything, "backend").Return(nil, errors.New("db error"))
 			},
 			expectedError: true,
-			errorCode:     ErrorCodeUnspecified,
+			errorCode:     model.ErrorCodeUnspecified,
 		},
 	}
 
@@ -101,7 +101,7 @@ func TestTeamService_AddTeam(t *testing.T) {
 		team          *model.Team
 		setupMocks    func(*MockTeamRepository, *MockUserRepository)
 		expectedError bool
-		errorCode     ErrorCode
+		errorCode     model.ErrorCode
 	}{
 		{
 			name: "success",
@@ -131,7 +131,7 @@ func TestTeamService_AddTeam(t *testing.T) {
 				tr.On("Create", mock.Anything, mock.Anything).Return(repository.ErrAlreadyExists)
 			},
 			expectedError: true,
-			errorCode:     ErrorCodeTeamExists,
+			errorCode:     model.ErrorCodeTeamExists,
 		},
 		{
 			name: "user upsert failure",
@@ -146,7 +146,7 @@ func TestTeamService_AddTeam(t *testing.T) {
 				ur.On("Upsert", mock.Anything, mock.Anything).Return(errors.New("db error"))
 			},
 			expectedError: true,
-			errorCode:     ErrorCodeUnspecified,
+			errorCode:     model.ErrorCodeUnspecified,
 		},
 	}
 

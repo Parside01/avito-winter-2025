@@ -27,7 +27,7 @@ func NewPullRequestService(tx db.Transactor) *PullRequestService {
 	}
 }
 
-func (p *PullRequestService) DeactivateTeamMembers(ctx context.Context, team string, users []string) *Error {
+func (p *PullRequestService) DeactivateTeamMembers(ctx context.Context, team string, users []string) *model.Error {
 	l := logger.FromContext(ctx)
 
 	l.Info("deactivating team members",
@@ -42,7 +42,7 @@ func (p *PullRequestService) DeactivateTeamMembers(ctx context.Context, team str
 		membersRepo, err := p.teams.GetTeamMembers(txCtx, team)
 		if err != nil {
 			l.Error("failed to get team members", zap.String("team_name", team), zap.Error(err))
-			return NewError(ErrorCodeUnspecified, "failed to get team members")
+			return model.NewError(model.ErrorCodeUnspecified, "failed to get team members", err)
 		}
 
 		members := make([]*model.TeamMember, 0, len(membersRepo))
@@ -61,7 +61,7 @@ func (p *PullRequestService) DeactivateTeamMembers(ctx context.Context, team str
 			inactiveUsers[userID] = struct{}{}
 			if _, exists := membersSet[userID]; !exists {
 				l.Warn("user not found in the team", zap.String("team_name", team), zap.String("user_id", userID))
-				return NewError(ErrorCodeNotFound, "user not found in the team")
+				return model.NewError(model.ErrorCodeNotFound, "user not found in the team")
 			}
 		}
 
@@ -80,7 +80,7 @@ func (p *PullRequestService) DeactivateTeamMembers(ctx context.Context, team str
 		assignments, err := p.prs.GetReviewAssignments(txCtx, users)
 		if err != nil {
 			l.Error("failed to get reviewer PRs", zap.Strings("user_ids", users), zap.Error(err))
-			return NewError(ErrorCodeUnspecified, "failed to get reviewer PRs")
+			return model.NewError(model.ErrorCodeUnspecified, "failed to get reviewer PRs", err)
 		}
 
 		prSet := make(map[string]struct{})
@@ -123,7 +123,7 @@ func (p *PullRequestService) DeactivateTeamMembers(ctx context.Context, team str
 			})
 			if err != nil {
 				l.Error("failed to patch user", zap.String("user_id", userID), zap.Error(err))
-				return NewError(ErrorCodeUnspecified, "failed to update user")
+				return model.NewError(model.ErrorCodeUnspecified, "failed to update user", err)
 			}
 
 			err = p.reviews.UnassignFromOpenPRs(txCtx, userID)
@@ -132,7 +132,7 @@ func (p *PullRequestService) DeactivateTeamMembers(ctx context.Context, team str
 					zap.String("user_id", userID),
 					zap.Error(err),
 				)
-				return NewError(ErrorCodeUnspecified, "failed to unassign user from open PRs")
+				return model.NewError(model.ErrorCodeUnspecified, "failed to unassign user from open PRs", err)
 			}
 		}
 
@@ -148,7 +148,7 @@ func (p *PullRequestService) DeactivateTeamMembers(ctx context.Context, team str
 						zap.String("new_reviewer", reviewerID),
 						zap.Error(err),
 					)
-					return NewError(ErrorCodeUnspecified, "failed to assign new reviewer")
+					return model.NewError(model.ErrorCodeUnspecified, "failed to assign new reviewer", err)
 				}
 			}
 		}
@@ -156,13 +156,13 @@ func (p *PullRequestService) DeactivateTeamMembers(ctx context.Context, team str
 		return nil
 	})
 
-	var res *Error
+	var res *model.Error
 	errors.As(err, &res)
 
 	return res
 }
 
-func (p *PullRequestService) GetUserReview(ctx context.Context, userID string) (*model.UserReviews, *Error) {
+func (p *PullRequestService) GetUserReview(ctx context.Context, userID string) (*model.UserReviews, *model.Error) {
 	l := logger.FromContext(ctx)
 	l.Info("getting user reviews", zap.String("user_id", userID))
 
@@ -171,7 +171,7 @@ func (p *PullRequestService) GetUserReview(ctx context.Context, userID string) (
 	repoPRs, err := p.prs.GetReviewedPRs(ctx, userID)
 	if err != nil {
 		l.Error("failed to get user review PRs", zap.String("user_id", userID), zap.Error(err))
-		return nil, NewError(ErrorCodeUnspecified, "failed to get user reviews")
+		return nil, model.NewError(model.ErrorCodeUnspecified, "failed to get user reviews")
 	}
 
 	for _, pr := range repoPRs {
@@ -192,7 +192,7 @@ func (p *PullRequestService) GetUserReview(ctx context.Context, userID string) (
 	return res, nil
 }
 
-func (p *PullRequestService) ReassignPullRequest(ctx context.Context, prID, userID string) (*model.PullRequest, *Error) {
+func (p *PullRequestService) ReassignPullRequest(ctx context.Context, prID, userID string) (*model.PullRequest, *model.Error) {
 	l := logger.FromContext(ctx)
 	l.Info("reassigning pull request", zap.String("pull_request_id", prID), zap.String("user_id", userID))
 
@@ -203,10 +203,10 @@ func (p *PullRequestService) ReassignPullRequest(ctx context.Context, prID, user
 		switch {
 		case errors.Is(err, repository.ErrNotFound):
 			l.Warn("user or team not found", zap.String("user_id", userID))
-			return NewError(ErrorCodeNotFound, "user or team not found")
+			return model.NewError(model.ErrorCodeNotFound, "user or team not found")
 		case err != nil:
 			l.Error("failed to get user team", zap.String("user_id", userID), zap.Error(err))
-			return NewError(ErrorCodeUnspecified, "failed to get user team")
+			return model.NewError(model.ErrorCodeUnspecified, "failed to get user team")
 		}
 
 		team := make([]*model.User, 0, len(repoTeam))
@@ -223,42 +223,42 @@ func (p *PullRequestService) ReassignPullRequest(ctx context.Context, prID, user
 		switch {
 		case errors.Is(err, repository.ErrNotFound):
 			l.Warn("PR not found", zap.String("pull_request_id", prID))
-			return NewError(ErrorCodeNotFound, "PR not found")
+			return model.NewError(model.ErrorCodeNotFound, "PR not found")
 		case err != nil:
 			l.Error("failed to get PR", zap.String("pull_request_id", prID), zap.Error(err))
-			return NewError(ErrorCodeUnspecified, "failed to get PR")
+			return model.NewError(model.ErrorCodeUnspecified, "failed to get PR")
 		}
 
 		if repoPR.Status == model.PRStatusMerged {
 			l.Warn("cannot reassign merged PR", zap.String("pull_request_id", prID))
-			return NewError(ErrorCodePRMerged, "cannot reassign on merged PR")
+			return model.NewError(model.ErrorCodePRMerged, "cannot reassign on merged PR")
 		}
 
 		reviewers, err := p.prs.GetReviewers(txCtx, prID)
 		if err != nil {
 			l.Error("failed to get reviewers", zap.String("pull_request_id", prID), zap.Error(err))
-			return NewError(ErrorCodeUnspecified, "failed to get reviewers")
+			return model.NewError(model.ErrorCodeUnspecified, "failed to get reviewers")
 		}
 
 		if !slices.Contains(reviewers, userID) {
 			l.Warn("reviewer not assigned to PR", zap.String("pull_request_id", prID), zap.String("user_id", userID))
-			return NewError(ErrorCodeNotAssigned, "reviewer is not assigned to this PR")
+			return model.NewError(model.ErrorCodeNotAssigned, "reviewer is not assigned to this PR")
 		}
 
 		newReviewer := p.selectReplacementReviewer(repoPR.AuthorID, reviewers, team)
 		if newReviewer == "" {
 			l.Warn("no replacement candidate found", zap.String("pull_request_id", prID))
-			return NewError(ErrorCodeNoCandidate, "no active replacement candidate in team")
+			return model.NewError(model.ErrorCodeNoCandidate, "no active replacement candidate in team")
 		}
 
 		if err = p.reviews.Unassign(txCtx, prID, userID); err != nil {
 			l.Error("failed to unassign old reviewer", zap.String("pull_request_id", prID), zap.String("user_id", userID), zap.Error(err))
-			return NewError(ErrorCodeUnspecified, "failed to unassign old reviewer")
+			return model.NewError(model.ErrorCodeUnspecified, "failed to unassign old reviewer")
 		}
 
 		if err = p.reviews.Assign(txCtx, prID, []string{newReviewer}); err != nil {
 			l.Error("failed to assign new reviewer", zap.String("pull_request_id", prID), zap.String("new_reviewer", newReviewer), zap.Error(err))
-			return NewError(ErrorCodeUnspecified, "failed to assign new reviewer")
+			return model.NewError(model.ErrorCodeUnspecified, "failed to assign new reviewer")
 		}
 
 		l.Debug("reviewer reassigned successfully",
@@ -276,7 +276,7 @@ func (p *PullRequestService) ReassignPullRequest(ctx context.Context, prID, user
 		return nil
 	})
 
-	var res *Error
+	var res *model.Error
 	errors.As(err, &res)
 
 	if res != nil {
@@ -286,7 +286,7 @@ func (p *PullRequestService) ReassignPullRequest(ctx context.Context, prID, user
 	return pr, res
 }
 
-func (p *PullRequestService) MergePullRequest(ctx context.Context, prID string) (*model.PullRequest, *Error) {
+func (p *PullRequestService) MergePullRequest(ctx context.Context, prID string) (*model.PullRequest, *model.Error) {
 	l := logger.FromContext(ctx)
 	l.Info("merging pull request", zap.String("pull_request_id", prID))
 
@@ -301,16 +301,16 @@ func (p *PullRequestService) MergePullRequest(ctx context.Context, prID string) 
 		switch {
 		case errors.Is(err, repository.ErrNotFound):
 			l.Warn("PR not found", zap.String("pull_request_id", prID))
-			return NewError(ErrorCodeNotFound, "PR not found")
+			return model.NewError(model.ErrorCodeNotFound, "PR not found")
 		case err != nil:
 			l.Error("failed to patch PR", zap.String("pull_request_id", prID), zap.Error(err))
-			return NewError(ErrorCodeUnspecified, "failed to get PR")
+			return model.NewError(model.ErrorCodeUnspecified, "failed to get PR")
 		}
 
 		reviewers, err := p.prs.GetReviewers(txCtx, prID)
 		if err != nil {
 			l.Error("failed to get reviewers", zap.String("pull_request_id", prID), zap.Error(err))
-			return NewError(ErrorCodeUnspecified, "failed to get reviewers")
+			return model.NewError(model.ErrorCodeUnspecified, "failed to get reviewers")
 		}
 
 		l.Debug("PR merged successfully", zap.String("pull_request_id", prID))
@@ -325,20 +325,20 @@ func (p *PullRequestService) MergePullRequest(ctx context.Context, prID string) 
 		return nil
 	})
 
-	var res *Error
+	var res *model.Error
 	errors.As(err, &res)
 
 	return pr, res
 }
 
-func (p *PullRequestService) GetStats(ctx context.Context) (*model.Stats, *Error) {
+func (p *PullRequestService) GetStats(ctx context.Context) (*model.Stats, *model.Error) {
 	l := logger.FromContext(ctx)
 	l.Info("getting statistics")
 
 	stats, err := p.prs.GetStats(ctx)
 	if err != nil {
 		l.Error("failed to get statistics", zap.Error(err))
-		return nil, NewError(ErrorCodeUnspecified, "failed to get statistics")
+		return nil, model.NewError(model.ErrorCodeUnspecified, "failed to get statistics")
 	}
 
 	l.Debug("statistics retrieved successfully")
@@ -346,7 +346,7 @@ func (p *PullRequestService) GetStats(ctx context.Context) (*model.Stats, *Error
 }
 
 // CreatePullRequest Create a new pull request and assign two team members as reviewers
-func (p *PullRequestService) CreatePullRequest(ctx context.Context, short *model.PullRequestShort) (*model.PullRequest, *Error) {
+func (p *PullRequestService) CreatePullRequest(ctx context.Context, short *model.PullRequestShort) (*model.PullRequest, *model.Error) {
 	l := logger.FromContext(ctx)
 	l.Info("creating pull request",
 		zap.String("pull_request_id", short.ID),
@@ -360,17 +360,17 @@ func (p *PullRequestService) CreatePullRequest(ctx context.Context, short *model
 		switch {
 		case errors.Is(err, repository.ErrNotFound):
 			l.Warn("author not found", zap.String("author_id", short.AuthorID))
-			return NewError(ErrorCodeNotFound, "author or PR not found")
+			return model.NewError(model.ErrorCodeNotFound, "author or PR not found")
 		case err != nil:
 			l.Error("failed to get author team", zap.String("author_id", short.AuthorID), zap.Error(err))
-			return NewError(ErrorCodeUnspecified, "failed to get author team")
+			return model.NewError(model.ErrorCodeUnspecified, "failed to get author team")
 		}
 
 		team := make([]*model.User, 0, len(repoTeam))
 		for i := range repoTeam {
 			if repoTeam[i].ID == short.AuthorID && !repoTeam[i].IsActive {
 				l.Warn("inactive user cannot create PR", zap.String("author_id", short.AuthorID))
-				return NewError(ErrorCodeUserInactive, "inactive user cannot create PR")
+				return model.NewError(model.ErrorCodeUserInactive, "inactive user cannot create PR")
 			}
 
 			team = append(team, &model.User{
@@ -392,10 +392,10 @@ func (p *PullRequestService) CreatePullRequest(ctx context.Context, short *model
 		switch {
 		case errors.Is(err, repository.ErrAlreadyExists):
 			l.Warn("PR already exists", zap.String("pull_request_id", short.ID))
-			return NewError(ErrorCodePRExists, "PR id already exists")
+			return model.NewError(model.ErrorCodePRExists, "PR id already exists")
 		case err != nil:
 			l.Error("failed to create PR", zap.String("pull_request_id", short.ID), zap.Error(err))
-			return NewError(ErrorCodeUnspecified, "failed to create PR")
+			return model.NewError(model.ErrorCodeUnspecified, "failed to create PR")
 		}
 
 		activeUsers := make(map[string]struct{})
@@ -410,7 +410,7 @@ func (p *PullRequestService) CreatePullRequest(ctx context.Context, short *model
 		err = p.reviews.Assign(txCtx, repoPR.ID, reviewers)
 		if err != nil {
 			l.Error("failed to assign reviewers", zap.String("pull_request_id", repoPR.ID), zap.Error(err))
-			return NewError(ErrorCodeUnspecified, "failed to assign PR")
+			return model.NewError(model.ErrorCodeUnspecified, "failed to assign PR")
 		}
 
 		l.Info("PR created successfully",
@@ -428,7 +428,7 @@ func (p *PullRequestService) CreatePullRequest(ctx context.Context, short *model
 		return nil
 	})
 
-	var res *Error
+	var res *model.Error
 	errors.As(err, &res)
 
 	return pr, res

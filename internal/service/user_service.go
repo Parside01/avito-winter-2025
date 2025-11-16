@@ -24,7 +24,7 @@ func NewUserService(tx db.Transactor) *UserService {
 	}
 }
 
-func (u *UserService) SetUserIsActive(ctx context.Context, userID string, isActive bool) (*model.User, *Error) {
+func (u *UserService) SetUserIsActive(ctx context.Context, userID string, isActive bool) (*model.User, *model.Error) {
 	l := logger.FromContext(ctx)
 
 	l.Info("setting user active status",
@@ -40,11 +40,11 @@ func (u *UserService) SetUserIsActive(ctx context.Context, userID string, isActi
 		})
 		if errors.Is(err, repository.ErrNotFound) {
 			l.Warn("user not found", zap.String("user_id", userID))
-			return NewError(ErrorCodeNotFound, "user not found")
+			return model.NewError(model.ErrorCodeNotFound, "user not found")
 		}
 		if err != nil {
 			l.Error("failed to patch user", zap.String("user_id", userID), zap.Error(err))
-			return NewError(ErrorCodeUnspecified, "failed to update user")
+			return model.NewError(model.ErrorCodeUnspecified, "failed to update user")
 		}
 
 		if !isActive {
@@ -53,7 +53,7 @@ func (u *UserService) SetUserIsActive(ctx context.Context, userID string, isActi
 					zap.String("user_id", userID),
 					zap.Error(err),
 				)
-				return NewError(ErrorCodeUnspecified, "failed to unassign user from open PRs")
+				return model.NewError(model.ErrorCodeUnspecified, "failed to unassign user from open PRs")
 			}
 		}
 
@@ -72,7 +72,7 @@ func (u *UserService) SetUserIsActive(ctx context.Context, userID string, isActi
 		return nil
 	})
 
-	var se *Error
+	var se *model.Error
 	errors.As(err, &se)
 	return result, se
 }

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"github.com/stretchr/testify/mock"
+	"github.com/yakoovad/avito-winter-2025/internal/model"
 	"github.com/yakoovad/avito-winter-2025/internal/repository"
 )
 
@@ -12,6 +13,11 @@ type MockTransactor struct {
 
 func (m *MockTransactor) WithinTransaction(ctx context.Context, fn func(context.Context) error) error {
 	return fn(ctx)
+}
+
+func (m *MockTransactor) Ping(ctx context.Context) error {
+	args := m.Called(ctx)
+	return args.Error(0)
 }
 
 type MockUserRepository struct {
@@ -73,6 +79,30 @@ type MockPullRequestRepository struct {
 	mock.Mock
 }
 
+func (m *MockPullRequestRepository) GetReviewedPRs(ctx context.Context, userID string) ([]*repository.PullRequest, error) {
+	args := m.Called(ctx, userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*repository.PullRequest), args.Error(1)
+}
+
+func (m *MockPullRequestRepository) GetStats(ctx context.Context) (*model.Stats, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*model.Stats), args.Error(1)
+}
+
+func (m *MockPullRequestRepository) GetReviewAssignments(ctx context.Context, users []string) ([]*repository.ReviewAssignment, error) {
+	args := m.Called(ctx, users)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*repository.ReviewAssignment), args.Error(1)
+}
+
 func (m *MockPullRequestRepository) Create(ctx context.Context, pr *repository.PullRequest) error {
 	args := m.Called(ctx, pr)
 	return args.Error(0)
@@ -121,5 +151,10 @@ func (m *MockReviewRepository) Assign(ctx context.Context, prID string, reviewer
 
 func (m *MockReviewRepository) Unassign(ctx context.Context, prID string, reviewerIDs string) error {
 	args := m.Called(ctx, prID, reviewerIDs)
+	return args.Error(0)
+}
+
+func (m *MockReviewRepository) UnassignFromOpenPRs(ctx context.Context, userID string) error {
+	args := m.Called(ctx, userID)
 	return args.Error(0)
 }

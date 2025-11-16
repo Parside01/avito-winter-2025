@@ -17,7 +17,7 @@ func TestUserService_SetUserIsActive(t *testing.T) {
 		isActive      bool
 		setupMocks    func(*MockUserRepository)
 		expectedError bool
-		errorCode     ErrorCode
+		errorCode     model.ErrorCode
 		expectedUser  *model.User
 	}{
 		{
@@ -76,7 +76,7 @@ func TestUserService_SetUserIsActive(t *testing.T) {
 				ur.On("Patch", mock.Anything, mock.Anything).Return(nil, repository.ErrNotFound)
 			},
 			expectedError: true,
-			errorCode:     ErrorCodeNotFound,
+			errorCode:     model.ErrorCodeNotFound,
 		},
 		{
 			name:     "patch failed",
@@ -86,7 +86,7 @@ func TestUserService_SetUserIsActive(t *testing.T) {
 				ur.On("Patch", mock.Anything, mock.Anything).Return(nil, errors.New("db error"))
 			},
 			expectedError: true,
-			errorCode:     ErrorCodeUnspecified,
+			errorCode:     model.ErrorCodeUnspecified,
 		},
 	}
 

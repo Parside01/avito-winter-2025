@@ -37,7 +37,7 @@ func AuthMiddleware(types ...auth.TokenType) echo.MiddlewareFunc {
 
 			response := struct {
 				Error *service.Error `json:"error"`
-			}{Error: service.NewError(service.ErrorCodeUnauthorized, err.Error())}
+			}{Error: service.model.NewError(service.model.ErrorCodeUnauthorized, err.Error())}
 
 			return c.JSON(http.StatusUnauthorized, response)
 		},

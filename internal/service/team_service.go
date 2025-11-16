@@ -24,7 +24,7 @@ func NewTeamService(tx db.Transactor) *TeamService {
 	}
 }
 
-func (t *TeamService) AddTeam(ctx context.Context, team *model.Team) *Error {
+func (t *TeamService) AddTeam(ctx context.Context, team *model.Team) *model.Error {
 	l := logger.FromContext(ctx)
 	l.Info("adding team", zap.String("team_name", team.Name), zap.Any("team", team))
 
@@ -34,11 +34,11 @@ func (t *TeamService) AddTeam(ctx context.Context, team *model.Team) *Error {
 		})
 		if errors.Is(err, repository.ErrAlreadyExists) {
 			l.Warn("team already exists", zap.String("team_name", team.Name))
-			return NewError(ErrorCodeTeamExists, "team_name already exists")
+			return model.NewError(model.ErrorCodeTeamExists, "team_name already exists")
 		}
 		if err != nil {
 			l.Error("failed to create team", zap.String("team_name", team.Name), zap.Error(err))
-			return NewError(ErrorCodeUnspecified, "failed to create team")
+			return model.NewError(model.ErrorCodeUnspecified, "failed to create team")
 		}
 
 		for _, user := range team.Members {
@@ -52,7 +52,7 @@ func (t *TeamService) AddTeam(ctx context.Context, team *model.Team) *Error {
 					zap.String("team_name", team.Name),
 					zap.String("user_id", user.UserID),
 					zap.Error(err))
-				return NewError(ErrorCodeUnspecified, "failed to upsert team member")
+				return model.NewError(model.ErrorCodeUnspecified, "failed to upsert team member")
 			}
 		}
 
@@ -61,30 +61,30 @@ func (t *TeamService) AddTeam(ctx context.Context, team *model.Team) *Error {
 		return nil
 	})
 
-	var res *Error
+	var res *model.Error
 	errors.As(err, &res)
 
 	return res
 }
 
-func (t *TeamService) GetTeam(ctx context.Context, name string) (*model.Team, *Error) {
+func (t *TeamService) GetTeam(ctx context.Context, name string) (*model.Team, *model.Error) {
 	l := logger.FromContext(ctx)
 	l.Debug("getting team", zap.String("team_name", name))
 
 	teamRepo, err := t.teams.Get(ctx, name)
 	if errors.Is(err, repository.ErrNotFound) {
 		l.Warn("team not found", zap.String("team_name", name))
-		return nil, NewError(ErrorCodeNotFound, "team not found")
+		return nil, model.NewError(model.ErrorCodeNotFound, "team not found")
 	}
 	if err != nil {
 		l.Error("failed to get team", zap.String("team_name", name), zap.Error(err))
-		return nil, NewError(ErrorCodeUnspecified, "failed to get team")
+		return nil, model.NewError(model.ErrorCodeUnspecified, "failed to get team")
 	}
 
 	membersRepo, err := t.teams.GetTeamMembers(ctx, name)
 	if err != nil {
 		l.Error("failed to get team members", zap.String("team_name", name), zap.Error(err))
-		return nil, NewError(ErrorCodeUnspecified, "failed to get team members")
+		return nil, model.NewError(model.ErrorCodeUnspecified, "failed to get team members")
 	}
 
 	members := make([]*model.TeamMember, 0, len(membersRepo))

@@ -1,4 +1,4 @@
-package service
+package model
 
 type ErrorCode string
 
@@ -18,12 +18,20 @@ const (
 type Error struct {
 	Code    ErrorCode `json:"code"`
 	Message string    `json:"message"`
+	Cause   error     `json:"-"`
 }
 
-func NewError(code ErrorCode, message string) *Error {
+func NewError(code ErrorCode, message string, cause ...error) *Error {
 	return &Error{
 		Code:    code,
 		Message: message,
+		Cause: func() error {
+			if len(cause) > 0 {
+				return cause[0]
+			} else {
+				return nil
+			}
+		}(),
 	}
 }
 

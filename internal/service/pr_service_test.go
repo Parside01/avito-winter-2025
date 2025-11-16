@@ -18,7 +18,7 @@ func TestPullRequestService_GetUserReview(t *testing.T) {
 		userID        string
 		setupMocks    func(*MockPullRequestRepository)
 		expectedError bool
-		errorCode     ErrorCode
+		errorCode     model.ErrorCode
 		expectedPRs   int
 	}{
 		{
@@ -59,7 +59,7 @@ func TestPullRequestService_GetUserReview(t *testing.T) {
 				pr.On("GetReviewedPRs", mock.Anything, "u3").Return(nil, errors.New("db error"))
 			},
 			expectedError: true,
-			errorCode:     ErrorCodeUnspecified,
+			errorCode:     model.ErrorCodeUnspecified,
 		},
 	}
 
@@ -97,7 +97,7 @@ func TestPullRequestService_CreatePullRequest(t *testing.T) {
 		prShort       *model.PullRequestShort
 		setupMocks    func(*MockUserRepository, *MockPullRequestRepository, *MockReviewRepository)
 		expectedError bool
-		errorCode     ErrorCode
+		errorCode     model.ErrorCode
 	}{
 		{
 			name: "success: create PR with 2 reviewers",
@@ -136,7 +136,7 @@ func TestPullRequestService_CreatePullRequest(t *testing.T) {
 				}, nil)
 			},
 			expectedError: true,
-			errorCode:     ErrorCodeUserInactive,
+			errorCode:     model.ErrorCodeUserInactive,
 		},
 		{
 			name: "failure: author not found",
@@ -150,7 +150,7 @@ func TestPullRequestService_CreatePullRequest(t *testing.T) {
 				ur.On("GetUserTeam", mock.Anything, "unknown").Return(nil, repository.ErrNotFound)
 			},
 			expectedError: true,
-			errorCode:     ErrorCodeNotFound,
+			errorCode:     model.ErrorCodeNotFound,
 		},
 		{
 			name: "failure: PR already exists",
@@ -168,7 +168,7 @@ func TestPullRequestService_CreatePullRequest(t *testing.T) {
 				pr.On("Create", mock.Anything, mock.Anything).Return(repository.ErrAlreadyExists)
 			},
 			expectedError: true,
-			errorCode:     ErrorCodePRExists,
+			errorCode:     model.ErrorCodePRExists,
 		},
 	}
 
@@ -213,7 +213,7 @@ func TestPullRequestService_ReassignPullRequest(t *testing.T) {
 		userID        string
 		setupMocks    func(*MockUserRepository, *MockPullRequestRepository, *MockReviewRepository)
 		expectedError bool
-		errorCode     ErrorCode
+		errorCode     model.ErrorCode
 	}{
 		{
 			name:   "success: reassign to new reviewer",
@@ -252,7 +252,7 @@ func TestPullRequestService_ReassignPullRequest(t *testing.T) {
 				pr.On("Get", mock.Anything, "unknown").Return(nil, repository.ErrNotFound)
 			},
 			expectedError: true,
-			errorCode:     ErrorCodeNotFound,
+			errorCode:     model.ErrorCodeNotFound,
 		},
 		{
 			name:   "failure: PR already merged",
@@ -271,7 +271,7 @@ func TestPullRequestService_ReassignPullRequest(t *testing.T) {
 				}, nil)
 			},
 			expectedError: true,
-			errorCode:     ErrorCodePRMerged,
+			errorCode:     model.ErrorCodePRMerged,
 		},
 		{
 			name:   "failure: reviewer not assigned",
@@ -292,7 +292,7 @@ func TestPullRequestService_ReassignPullRequest(t *testing.T) {
 				pr.On("GetReviewers", mock.Anything, "pr-1001").Return([]string{"u2", "u3"}, nil)
 			},
 			expectedError: true,
-			errorCode:     ErrorCodeNotAssigned,
+			errorCode:     model.ErrorCodeNotAssigned,
 		},
 		{
 			name:   "failure: no replacement candidate",
@@ -314,7 +314,7 @@ func TestPullRequestService_ReassignPullRequest(t *testing.T) {
 				pr.On("GetReviewers", mock.Anything, "pr-1001").Return([]string{"u2"}, nil)
 			},
 			expectedError: true,
-			errorCode:     ErrorCodeNoCandidate,
+			errorCode:     model.ErrorCodeNoCandidate,
 		},
 	}
 
@@ -358,7 +358,7 @@ func TestPullRequestService_MergePullRequest(t *testing.T) {
 		prID          string
 		setupMocks    func(*MockPullRequestRepository)
 		expectedError bool
-		errorCode     ErrorCode
+		errorCode     model.ErrorCode
 	}{
 		{
 			name: "success: - merge PR",
@@ -385,7 +385,7 @@ func TestPullRequestService_MergePullRequest(t *testing.T) {
 				pr.On("Patch", mock.Anything, mock.Anything).Return(nil, repository.ErrNotFound)
 			},
 			expectedError: true,
-			errorCode:     ErrorCodeNotFound,
+			errorCode:     model.ErrorCodeNotFound,
 		},
 	}
 

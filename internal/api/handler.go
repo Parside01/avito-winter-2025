@@ -117,7 +117,7 @@ func (h *Handler) GenerateToken(e echo.Context) error {
 	token, err := auth.GenerateToken(req.Type, req.Duration)
 	if err != nil {
 		l.Error("failed to generate token", zap.Any("error", err))
-		return h.transportError(e, service.NewError(service.ErrorCodeUnspecified, "failed to generate token"))
+		return h.transportError(e, service.model.NewError(service.model.ErrorCodeUnspecified, "failed to generate token"))
 	}
 
 	return e.JSON(http.StatusOK, token)
@@ -307,11 +307,11 @@ func (h *Handler) GetTeam(e echo.Context) error {
 
 func (h *Handler) decodeRequest(e echo.Context, req any) *service.Error {
 	if err := e.Bind(req); err != nil {
-		return service.NewError(service.ErrorCodeInvalidBody, "invalid request body")
+		return service.model.NewError(service.model.ErrorCodeInvalidBody, "invalid request body")
 	}
 
 	if err := e.Validate(req); err != nil {
-		return service.NewError(service.ErrorCodeInvalidBody, errors.Wrap(err, "request validation failed").Error())
+		return service.model.NewError(service.model.ErrorCodeInvalidBody, errors.Wrap(err, "request validation failed").Error())
 	}
 	return nil
 }
@@ -322,15 +322,15 @@ func (h *Handler) transportError(e echo.Context, err *service.Error) error {
 	}{Error: err}
 
 	switch err.Code {
-	case service.ErrorCodeNotFound:
+	case service.model.ErrorCodeNotFound:
 		return e.JSON(http.StatusNotFound, response)
-	case service.ErrorCodeTeamExists:
+	case service.model.ErrorCodeTeamExists:
 		return e.JSON(http.StatusBadRequest, response)
-	case service.ErrorCodePRExists, service.ErrorCodePRMerged, service.ErrorCodeNotAssigned, service.ErrorCodeNoCandidate:
+	case service.model.ErrorCodePRExists, service.model.ErrorCodePRMerged, service.model.ErrorCodeNotAssigned, service.model.ErrorCodeNoCandidate:
 		return e.JSON(http.StatusConflict, response)
-	case service.ErrorCodeInvalidBody:
+	case service.model.ErrorCodeInvalidBody:
 		return e.JSON(http.StatusBadRequest, response)
-	case service.ErrorCodeUserInactive:
+	case service.model.ErrorCodeUserInactive:
 		return e.JSON(http.StatusConflict, response)
 	default:
 		return e.JSON(http.StatusInternalServerError, response)
