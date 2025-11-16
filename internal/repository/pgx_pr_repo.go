@@ -89,7 +89,6 @@ func (p *pgxPullRequestRepository) GetReviewAssignments(ctx context.Context, use
 		//psql.Quote("pr", "author_id"),
 		//psql.Quote("pr", "name"),
 		//psql.Quote("pr", "status")),
-		sm.ForShare("review"),
 	)
 	sql, args, err := q.Build(ctx)
 	if err != nil {
