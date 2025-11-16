@@ -117,7 +117,7 @@ func (h *Handler) GenerateToken(e echo.Context) error {
 	token, err := auth.GenerateToken(req.Type, req.Duration)
 	if err != nil {
 		l.Error("failed to generate token", zap.Any("error", err))
-		return h.transportError(e, service.model.NewError(service.model.ErrorCodeUnspecified, "failed to generate token"))
+		return h.transportError(e, model.NewError(model.ErrorCodeUnspecified, "failed to generate token"))
 	}
 
 	return e.JSON(http.StatusOK, token)
@@ -305,32 +305,32 @@ func (h *Handler) GetTeam(e echo.Context) error {
 	return e.JSON(http.StatusOK, team)
 }
 
-func (h *Handler) decodeRequest(e echo.Context, req any) *service.Error {
+func (h *Handler) decodeRequest(e echo.Context, req any) *model.Error {
 	if err := e.Bind(req); err != nil {
-		return service.model.NewError(service.model.ErrorCodeInvalidBody, "invalid request body")
+		return model.NewError(model.ErrorCodeInvalidBody, "invalid request body")
 	}
 
 	if err := e.Validate(req); err != nil {
-		return service.model.NewError(service.model.ErrorCodeInvalidBody, errors.Wrap(err, "request validation failed").Error())
+		return model.NewError(model.ErrorCodeInvalidBody, errors.Wrap(err, "request validation failed").Error())
 	}
 	return nil
 }
 
-func (h *Handler) transportError(e echo.Context, err *service.Error) error {
+func (h *Handler) transportError(e echo.Context, err *model.Error) error {
 	response := struct {
-		Error *service.Error `json:"error"`
+		Error *model.Error `json:"error"`
 	}{Error: err}
 
 	switch err.Code {
-	case service.model.ErrorCodeNotFound:
+	case model.ErrorCodeNotFound:
 		return e.JSON(http.StatusNotFound, response)
-	case service.model.ErrorCodeTeamExists:
+	case model.ErrorCodeTeamExists:
 		return e.JSON(http.StatusBadRequest, response)
-	case service.model.ErrorCodePRExists, service.model.ErrorCodePRMerged, service.model.ErrorCodeNotAssigned, service.model.ErrorCodeNoCandidate:
+	case model.ErrorCodePRExists, model.ErrorCodePRMerged, model.ErrorCodeNotAssigned, model.ErrorCodeNoCandidate:
 		return e.JSON(http.StatusConflict, response)
-	case service.model.ErrorCodeInvalidBody:
+	case model.ErrorCodeInvalidBody:
 		return e.JSON(http.StatusBadRequest, response)
-	case service.model.ErrorCodeUserInactive:
+	case model.ErrorCodeUserInactive:
 		return e.JSON(http.StatusConflict, response)
 	default:
 		return e.JSON(http.StatusInternalServerError, response)

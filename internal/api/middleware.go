@@ -4,7 +4,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/yakoovad/avito-winter-2025/internal/auth"
-	"github.com/yakoovad/avito-winter-2025/internal/service"
+	"github.com/yakoovad/avito-winter-2025/internal/model"
 	"github.com/yakoovad/avito-winter-2025/pkg/logger"
 	"go.uber.org/zap"
 	"net/http"
@@ -36,8 +36,8 @@ func AuthMiddleware(types ...auth.TokenType) echo.MiddlewareFunc {
 			l.Error("unauthorized access attempt", zap.Error(err))
 
 			response := struct {
-				Error *service.Error `json:"error"`
-			}{Error: service.model.NewError(service.model.ErrorCodeUnauthorized, err.Error())}
+				Error *model.Error `json:"error"`
+			}{Error: model.NewError(model.ErrorCodeUnauthorized, err.Error())}
 
 			return c.JSON(http.StatusUnauthorized, response)
 		},
