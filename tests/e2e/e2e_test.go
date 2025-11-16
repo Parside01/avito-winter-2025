@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 	"unicode"
@@ -31,18 +32,22 @@ type metric struct {
 }
 
 var httpMetrics = struct {
+	mu   sync.Mutex
 	data map[string]*metric
 }{
 	data: make(map[string]*metric),
 }
 
 var sliSuccess = struct {
+	mu   sync.Mutex
 	data map[string]*metric
 }{
 	data: make(map[string]*metric),
 }
 
 func recordMetric(endpoint string, durationMs int64) {
+	httpMetrics.mu.Lock()
+	defer httpMetrics.mu.Unlock()
 	m, ok := httpMetrics.data[endpoint]
 	if !ok {
 		m = &metric{}
@@ -53,6 +58,9 @@ func recordMetric(endpoint string, durationMs int64) {
 }
 
 func recordMetricSuccess(endpoint string, success bool) {
+	sliSuccess.mu.Lock()
+	defer sliSuccess.mu.Unlock()
+
 	m, ok := sliSuccess.data[endpoint]
 	if !ok {
 		m = &metric{}
