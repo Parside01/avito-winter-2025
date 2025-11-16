@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	faker "github.com/go-faker/faker/v4"
+	"github.com/go-faker/faker/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/testcontainers/testcontainers-go/log"
 	"github.com/testcontainers/testcontainers-go/modules/compose"
@@ -15,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 	"unicode"
@@ -231,208 +230,18 @@ func TestEndToEnd(t *testing.T) {
 	})
 }
 
-func runReassignPRLoadTest(
-	t *testing.T,
-	baseURL string,
-	token string,
-	userPRs map[string][]string,
-	numWorkers int,
-	requestsPerWorker int,
-) {
-	t.Helper()
-
-	var wg sync.WaitGroup
-	wg.Add(numWorkers)
-
-	type prInfo struct {
-		UserID string
-		PRID   string
-	}
-	var allPRs []prInfo
-	for userID, prs := range userPRs {
-		for _, prID := range prs {
-			allPRs = append(allPRs, prInfo{UserID: userID, PRID: prID})
-		}
-	}
-
-	if len(allPRs) == 0 {
-		t.Log("No pull requests to reassign, skipping test.")
-		return
-	}
-
-	for w := 0; w < numWorkers; w++ {
-		go func(workerID int) {
-			defer wg.Done()
-			rnd := rand.New(rand.NewSource(time.Now().UnixNano() + int64(workerID)))
-
-			for i := 0; i < requestsPerWorker; i++ {
-				prToReassign := allPRs[rnd.Intn(len(allPRs))]
-
-				reqBody := ReassignPullRequestRequest{
-					ID:     prToReassign.PRID,
-					UserID: prToReassign.UserID,
-				}
-
-				doJSONRequest(
-					t,
-					http.MethodPost,
-					baseURL+"/pullRequest/reassign",
-					token,
-					reqBody,
-				)
-
-				delay := minWorkerDelay + time.Duration(rnd.Int63n(int64(maxWorkerDelay-minWorkerDelay)))
-				time.Sleep(delay)
-			}
-		}(w)
-	}
-
-	wg.Wait()
-}
-
-func runGetUserReviewLoadTest(
-	t *testing.T,
-	baseURL string,
-	token string,
-	teamUsers map[string][]string,
-	numWorkers int,
-	requestsPerWorker int,
-) {
-	t.Helper()
-
-	var wg sync.WaitGroup
-	wg.Add(numWorkers)
-
-	var allUsers []string
-	for _, users := range teamUsers {
-		allUsers = append(allUsers, users...)
-	}
-
-	for w := 0; w < numWorkers; w++ {
-		go func(workerID int) {
-			defer wg.Done()
-			rnd := rand.New(rand.NewSource(time.Now().UnixNano() + int64(workerID)))
-
-			for i := 0; i < requestsPerWorker; i++ {
-				userID := allUsers[rnd.Intn(len(allUsers))]
-				url := fmt.Sprintf("%s/users/getReview?user_id=%s", baseURL, userID)
-				doJSONRequest(t, http.MethodGet, url, token, nil)
-
-				delay := minWorkerDelay + time.Duration(rnd.Int63n(int64(maxWorkerDelay-minWorkerDelay)))
-				time.Sleep(delay)
-			}
-		}(w)
-	}
-
-	wg.Wait()
-}
-
-func runGetTeamLoadTest(
-	t *testing.T,
-	baseURL string,
-	token string,
-	allTeams []string,
-	numWorkers int,
-	requestsPerWorker int,
-) {
-	t.Helper()
-
-	var wg sync.WaitGroup
-	wg.Add(numWorkers)
-
-	for w := 0; w < numWorkers; w++ {
-		go func(workerID int) {
-			defer wg.Done()
-			rnd := rand.New(rand.NewSource(time.Now().UnixNano() + int64(workerID)))
-
-			for i := 0; i < requestsPerWorker; i++ {
-				teamName := allTeams[rnd.Intn(len(allTeams))]
-				url := fmt.Sprintf("%s/team/get?team_name=%s", baseURL, teamName)
-				doJSONRequest(t, http.MethodGet, url, token, nil)
-
-				delay := minWorkerDelay + time.Duration(rnd.Int63n(int64(maxWorkerDelay-minWorkerDelay)))
-				time.Sleep(delay)
-			}
-		}(w)
-	}
-
-	wg.Wait()
-}
-
-func runDeactivateMembersLoadTest(
-	t *testing.T,
-	baseURL string,
-	token string,
-	allTeams []string,
-	teamUsers map[string][]string,
-	numWorkers int,
-	requestsPerWorker int,
-) {
-	t.Helper()
-
-	var wg sync.WaitGroup
-	wg.Add(numWorkers)
-
-	for w := 0; w < numWorkers; w++ {
-		go func(workerID int) {
-			defer wg.Done()
-
-			rnd := rand.New(rand.NewSource(time.Now().UnixNano() + int64(workerID)))
-
-			for i := 0; i < requestsPerWorker; i++ {
-				teamIdx := rnd.Intn(len(allTeams))
-				teamName := allTeams[teamIdx]
-
-				users := teamUsers[teamName]
-				if len(users) == 0 {
-					continue
-				}
-
-				maxUsers := len(users)
-				count := rnd.Intn(maxUsers/4) + 1
-
-				tmp := make([]string, len(users))
-				copy(tmp, users)
-				rnd.Shuffle(len(tmp), func(i, j int) {
-					tmp[i], tmp[j] = tmp[j], tmp[i]
-				})
-
-				selected := tmp[:count]
-
-				reqBody := DeactivateMembersRequest{
-					Team:    teamName,
-					Members: selected,
-				}
-
-				doJSONRequest(
-					t,
-					http.MethodPost,
-					baseURL+"/team/deactivateMembers",
-					token,
-					reqBody,
-				)
-
-				delay := minWorkerDelay + time.Duration(rnd.Int63n(int64(maxWorkerDelay-minWorkerDelay)))
-				time.Sleep(delay)
-			}
-		}(w)
-	}
-
-	wg.Wait()
-}
-
 type teamMemberPayload struct {
 	UserID   string `json:"user_id"`
 	Username string `json:"username"`
 	IsActive bool   `json:"is_active"`
 }
 
-type teamAddPayload struct {
+type TeamAddRequest struct {
 	TeamName string              `json:"team_name"`
 	Members  []teamMemberPayload `json:"members"`
 }
 
-type prCreatePayload struct {
+type PRCreateRequest struct {
 	PRID   string `json:"pull_request_id"`
 	Name   string `json:"pull_request_name"`
 	Author string `json:"author_id"`
@@ -467,7 +276,7 @@ func prepareTestData(t *testing.T, baseURL string, token string) (allTeams []str
 			userCount++
 		}
 
-		body := teamAddPayload{
+		body := TeamAddRequest{
 			TeamName: teamName,
 			Members:  members,
 		}
@@ -491,7 +300,7 @@ func prepareTestData(t *testing.T, baseURL string, token string) (allTeams []str
 				prID := fmt.Sprintf("pr-%s-%s-%d", teamName, userID, k+1)
 				prName := faker.Sentence()
 
-				prBody := prCreatePayload{
+				prBody := PRCreateRequest{
 					PRID:   prID,
 					Name:   prName,
 					Author: userID,
@@ -511,7 +320,7 @@ func prepareTestData(t *testing.T, baseURL string, token string) (allTeams []str
 	return allTeams, teamUsers, userPRs
 }
 
-func doJSONRequest(t *testing.T, method, url, token string, body any) *http.Response {
+func doJSONRequest(t *testing.T, method, url, token string, body any) {
 	t.Helper()
 
 	var buf bytes.Buffer
@@ -537,8 +346,11 @@ func doJSONRequest(t *testing.T, method, url, token string, body any) *http.Resp
 	if err != nil {
 		t.Errorf("request failed: %v", err)
 		recordMetricSuccess(url, false)
-		return nil
+		return
 	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode >= 400 {
 		var b bytes.Buffer
@@ -551,9 +363,9 @@ func doJSONRequest(t *testing.T, method, url, token string, body any) *http.Resp
 			t.Errorf("request to %s failed: %s, body: %s", url, resp.Status, b.String())
 		}
 		recordMetricSuccess(url, false)
-		return nil
+		return
 	}
 	recordMetricSuccess(url, resp.StatusCode < 400)
 	t.Logf("%s request to %s, time: %d ms", method, url, time.Since(start).Milliseconds())
-	return resp
+	return
 }
