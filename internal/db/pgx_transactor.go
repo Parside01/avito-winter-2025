@@ -9,6 +9,7 @@ import (
 	"github.com/yakoovad/avito-winter-2025/internal/model"
 	"github.com/yakoovad/avito-winter-2025/pkg/logger"
 	"go.uber.org/zap"
+	"time"
 )
 
 // Transactor allows you to run queries from repositories within a transaction
@@ -42,6 +43,13 @@ func (t *pgxTransactor) WithinTransaction(ctx context.Context, fn func(ctx conte
 				return err
 			}
 			l.Warn("deadlock detected, retrying transaction", zap.Int("attempt", i+1), zap.Int("max_retries", t.maxRetries))
+
+			backoff := time.Duration(1<<uint(i)) * 50 * time.Millisecond
+			select {
+			case <-time.After(backoff):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 			continue
 		}
 		if err != nil {
