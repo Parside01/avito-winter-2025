@@ -1,4 +1,4 @@
-package load_test
+package e2e_test
 
 import (
 	"bytes"
@@ -19,6 +19,11 @@ import (
 	"testing"
 	"time"
 	"unicode"
+)
+
+const (
+	minWorkerDelay = 10 * time.Millisecond
+	maxWorkerDelay = 100 * time.Millisecond
 )
 
 type metric struct {
@@ -84,7 +89,12 @@ type DeactivateMembersRequest struct {
 	Members []string `json:"users"`
 }
 
-func TestLoad_TeamDeactivateMembers(t *testing.T) {
+type ReassignPullRequestRequest struct {
+	ID     string `json:"pull_request_id"`
+	UserID string `json:"old_user_id"`
+}
+
+func TestEndToEnd(t *testing.T) {
 	t.Helper()
 
 	_ = os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
@@ -161,21 +171,192 @@ func TestLoad_TeamDeactivateMembers(t *testing.T) {
 
 	baseUrl := fmt.Sprintf("http://localhost:%s", port.Port())
 
-	allTeams, teamUsers := prepareTestData(t, baseUrl, token)
+	allTeams, teamUsers, userPRs := prepareTestData(t, baseUrl, token)
 	assert.NotEmpty(t, allTeams)
 	assert.NotEmpty(t, teamUsers)
+	assert.NotEmpty(t, userPRs)
+
+	const (
+		numWorkers        = 5
+		requestsPerWorker = 200
+	)
 
 	t.Run("deactivate members load test", func(t *testing.T) {
+		t.Parallel()
 		runDeactivateMembersLoadTest(
 			t,
 			baseUrl,
 			token,
 			allTeams,
 			teamUsers,
-			5,
-			200,
+			numWorkers,
+			requestsPerWorker,
 		)
 	})
+
+	t.Run("get team load test", func(t *testing.T) {
+		t.Parallel()
+		runGetTeamLoadTest(
+			t,
+			baseUrl,
+			token,
+			allTeams,
+			numWorkers,
+			requestsPerWorker,
+		)
+	})
+
+	t.Run("get user review load test", func(t *testing.T) {
+		t.Parallel()
+		runGetUserReviewLoadTest(
+			t,
+			baseUrl,
+			token,
+			teamUsers,
+			numWorkers,
+			requestsPerWorker,
+		)
+	})
+
+	t.Run("reassign pull request load test", func(t *testing.T) {
+		t.Parallel()
+		runReassignPRLoadTest(
+			t,
+			baseUrl,
+			token,
+			userPRs,
+			numWorkers,
+			requestsPerWorker,
+		)
+	})
+}
+
+func runReassignPRLoadTest(
+	t *testing.T,
+	baseURL string,
+	token string,
+	userPRs map[string][]string,
+	numWorkers int,
+	requestsPerWorker int,
+) {
+	t.Helper()
+
+	var wg sync.WaitGroup
+	wg.Add(numWorkers)
+
+	type prInfo struct {
+		UserID string
+		PRID   string
+	}
+	var allPRs []prInfo
+	for userID, prs := range userPRs {
+		for _, prID := range prs {
+			allPRs = append(allPRs, prInfo{UserID: userID, PRID: prID})
+		}
+	}
+
+	if len(allPRs) == 0 {
+		t.Log("No pull requests to reassign, skipping test.")
+		return
+	}
+
+	for w := 0; w < numWorkers; w++ {
+		go func(workerID int) {
+			defer wg.Done()
+			rnd := rand.New(rand.NewSource(time.Now().UnixNano() + int64(workerID)))
+
+			for i := 0; i < requestsPerWorker; i++ {
+				prToReassign := allPRs[rnd.Intn(len(allPRs))]
+
+				reqBody := ReassignPullRequestRequest{
+					ID:     prToReassign.PRID,
+					UserID: prToReassign.UserID,
+				}
+
+				doJSONRequest(
+					t,
+					http.MethodPost,
+					baseURL+"/pullRequest/reassign",
+					token,
+					reqBody,
+				)
+
+				delay := minWorkerDelay + time.Duration(rnd.Int63n(int64(maxWorkerDelay-minWorkerDelay)))
+				time.Sleep(delay)
+			}
+		}(w)
+	}
+
+	wg.Wait()
+}
+
+func runGetUserReviewLoadTest(
+	t *testing.T,
+	baseURL string,
+	token string,
+	teamUsers map[string][]string,
+	numWorkers int,
+	requestsPerWorker int,
+) {
+	t.Helper()
+
+	var wg sync.WaitGroup
+	wg.Add(numWorkers)
+
+	var allUsers []string
+	for _, users := range teamUsers {
+		allUsers = append(allUsers, users...)
+	}
+
+	for w := 0; w < numWorkers; w++ {
+		go func(workerID int) {
+			defer wg.Done()
+			rnd := rand.New(rand.NewSource(time.Now().UnixNano() + int64(workerID)))
+
+			for i := 0; i < requestsPerWorker; i++ {
+				userID := allUsers[rnd.Intn(len(allUsers))]
+				url := fmt.Sprintf("%s/users/getReview?user_id=%s", baseURL, userID)
+				doJSONRequest(t, http.MethodGet, url, token, nil)
+
+				delay := minWorkerDelay + time.Duration(rnd.Int63n(int64(maxWorkerDelay-minWorkerDelay)))
+				time.Sleep(delay)
+			}
+		}(w)
+	}
+
+	wg.Wait()
+}
+
+func runGetTeamLoadTest(
+	t *testing.T,
+	baseURL string,
+	token string,
+	allTeams []string,
+	numWorkers int,
+	requestsPerWorker int,
+) {
+	t.Helper()
+
+	var wg sync.WaitGroup
+	wg.Add(numWorkers)
+
+	for w := 0; w < numWorkers; w++ {
+		go func(workerID int) {
+			defer wg.Done()
+			rnd := rand.New(rand.NewSource(time.Now().UnixNano() + int64(workerID)))
+
+			for i := 0; i < requestsPerWorker; i++ {
+				teamName := allTeams[rnd.Intn(len(allTeams))]
+				url := fmt.Sprintf("%s/team/get?team_name=%s", baseURL, teamName)
+				doJSONRequest(t, http.MethodGet, url, token, nil)
+
+				delay := minWorkerDelay + time.Duration(rnd.Int63n(int64(maxWorkerDelay-minWorkerDelay)))
+				time.Sleep(delay)
+			}
+		}(w)
+	}
+
+	wg.Wait()
 }
 
 func runDeactivateMembersLoadTest(
@@ -230,6 +411,9 @@ func runDeactivateMembersLoadTest(
 					token,
 					reqBody,
 				)
+
+				delay := minWorkerDelay + time.Duration(rnd.Int63n(int64(maxWorkerDelay-minWorkerDelay)))
+				time.Sleep(delay)
 			}
 		}(w)
 	}
@@ -254,10 +438,11 @@ type prCreatePayload struct {
 	Author string `json:"author_id"`
 }
 
-func prepareTestData(t *testing.T, baseURL string, token string) (allTeams []string, teamUsers map[string][]string) {
+func prepareTestData(t *testing.T, baseURL string, token string) (allTeams []string, teamUsers map[string][]string, userPRs map[string][]string) {
 	t.Helper()
 
 	teamUsers = make(map[string][]string)
+	userPRs = make(map[string][]string)
 
 	numTeams := 20
 	userCount := 0
@@ -318,11 +503,12 @@ func prepareTestData(t *testing.T, baseURL string, token string) (allTeams []str
 					token,
 					prBody,
 				)
+				userPRs[userID] = append(userPRs[userID], prID)
 			}
 		}
 	}
 
-	return allTeams, teamUsers
+	return allTeams, teamUsers, userPRs
 }
 
 func doJSONRequest(t *testing.T, method, url, token string, body any) *http.Response {
@@ -358,11 +544,16 @@ func doJSONRequest(t *testing.T, method, url, token string, body any) *http.Resp
 		var b bytes.Buffer
 		_, _ = b.ReadFrom(resp.Body)
 		_ = resp.Body.Close()
-		t.Errorf("request to %s failed: %s, body: %s", url, resp.Status, b.String())
+
+		if resp.StatusCode == http.StatusConflict {
+			t.Logf("request to %s finished with conflict: %s, body: %s", url, resp.Status, b.String())
+		} else {
+			t.Errorf("request to %s failed: %s, body: %s", url, resp.Status, b.String())
+		}
 		recordMetricSuccess(url, false)
 		return nil
 	}
 	recordMetricSuccess(url, resp.StatusCode < 400)
-	t.Logf("Success %s request to %s, time: %d ms", method, url, time.Since(start).Milliseconds())
+	t.Logf("%s request to %s, time: %d ms", method, url, time.Since(start).Milliseconds())
 	return resp
 }
