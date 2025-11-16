@@ -26,7 +26,7 @@ var generateApiKeyCmd = &cobra.Command{
 			os.Exit(1)
 		}
 		if onlyToken {
-			fmt.Println(token)
+			fmt.Print(token)
 			return
 		}
 		fmt.Println("Your time to live:", ttl.Seconds(), "sec", "for token type:", tokenType)

@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode"
 )
 
 type DeactivateMembersRequest struct {
@@ -66,10 +67,21 @@ func TestLoad_TeamDeactivateMembers(t *testing.T) {
 	_, reader, err := app.Exec(ctx, []string{"./main", "generate-api-key", "--type", "admin", "--only-token", "true"})
 	assert.NoError(t, err)
 
-	buf := make([]byte, 4096)
-	_, err = reader.Read(buf)
+	var buf bytes.Buffer
+	_, err = buf.ReadFrom(reader)
 	assert.NoError(t, err)
-	token := strings.TrimSpace(string(buf))
+
+	token := buf.String()
+	token = strings.Map(func(r rune) rune {
+		if r > unicode.MaxASCII {
+			return -1
+		}
+		if r < ' ' {
+			return -1
+		}
+		return r
+	}, token)
+
 	assert.NotEmpty(t, token)
 
 	allTeams, teamUsers := prepareTestData(t, "http://localhost:8080", token)
@@ -180,6 +192,7 @@ func doJSONRequest(t *testing.T, method, url, token string, body any) *http.Resp
 		t.Fatalf("failed to create request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	t.Logf("Making %s request to %s, with token %s", method, url, token)
 	req.Header.Set("X-Api-Key", token)
 
 	resp, err := http.DefaultClient.Do(req)
