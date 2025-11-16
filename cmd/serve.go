@@ -56,7 +56,7 @@ func runServer() {
 
 	l.Info("database connection established")
 
-	transactor := db.NewPgxTransactor(pool, 5)
+	transactor := db.NewPgxTransactor(pool, 2)
 
 	teamRepo := repository.NewPgxTeamRepository(pool)
 	prRepo := repository.NewPgxPullRequestRepository(pool)
