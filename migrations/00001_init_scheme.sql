@@ -1,6 +1,10 @@
 -- +goose Up
 -- +goose StatementBegin
-CREATE TYPE pull_request_status AS ENUM ('OPEN', 'MERGED');
+DO $$ BEGIN
+    CREATE TYPE pull_request_status AS ENUM ('OPEN', 'MERGED');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 CREATE TABLE IF NOT EXISTS team
 (

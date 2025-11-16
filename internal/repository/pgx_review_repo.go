@@ -6,12 +6,14 @@ import (
 	"github.com/stephenafamo/bob/dialect/psql"
 	"github.com/stephenafamo/bob/dialect/psql/dm"
 	"github.com/stephenafamo/bob/dialect/psql/im"
+	"github.com/stephenafamo/bob/dialect/psql/sm"
 	"github.com/yakoovad/avito-winter-2025/internal/db"
 )
 
 type ReviewRepository interface {
 	Assign(ctx context.Context, prID string, reviewerIDs []string) error
 	Unassign(ctx context.Context, prID string, reviewerIDs string) error
+	UnassignFromOpenPRs(ctx context.Context, userID string) error
 }
 type pgxReviewRepository struct {
 	pool *pgxpool.Pool
@@ -19,6 +21,33 @@ type pgxReviewRepository struct {
 
 func NewPgxReviewRepository(pool *pgxpool.Pool) ReviewRepository {
 	return &pgxReviewRepository{pool: pool}
+}
+
+func (p *pgxReviewRepository) UnassignFromOpenPRs(ctx context.Context, userID string) error {
+	e := db.GetPgxExecutorFromContext(ctx, p.pool)
+
+	q := psql.Delete(
+		dm.From("review"),
+		dm.Where(
+			psql.Quote("user_id").EQ(psql.Arg(userID)).And(
+				psql.Quote("pull_request_id").In(
+					psql.Select(
+						sm.Columns("id"),
+						sm.From("pull_request"),
+						sm.Where(psql.Quote("status").EQ(psql.Arg("OPEN"))),
+					),
+				),
+			),
+		),
+	)
+
+	sql, args, err := q.Build(ctx)
+	if err != nil {
+		return err
+	}
+
+	_, err = e.Exec(ctx, sql, args...)
+	return err
 }
 
 func (p *pgxReviewRepository) Assign(ctx context.Context, prID string, reviewerIDs []string) error {

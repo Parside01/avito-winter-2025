@@ -1,0 +1,196 @@
+package load_test
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	faker "github.com/go-faker/faker/v4"
+	"github.com/stretchr/testify/assert"
+	"github.com/testcontainers/testcontainers-go/log"
+	"github.com/testcontainers/testcontainers-go/modules/compose"
+	"github.com/testcontainers/testcontainers-go/wait"
+	"math/rand"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+type DeactivateMembersRequest struct {
+	Team    string   `json:"team_name"`
+	Members []string `json:"users"`
+}
+
+func TestLoad_TeamDeactivateMembers(t *testing.T) {
+	t.Helper()
+
+	_ = os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
+
+	ctx := context.Background()
+
+	composePath := filepath.Join("../../", "docker-compose.yml")
+
+	stack, err := compose.NewDockerComposeWith(
+		compose.WithStackFiles(composePath),
+		compose.WithLogger(log.Default()),
+		compose.StackIdentifier("load_test_team_deactivate"),
+	)
+	if err != nil {
+		t.Fatalf("failed to create compose stack: %v", err)
+	}
+
+	stack.WaitForService("app", wait.ForHealthCheck())
+
+	t.Cleanup(func() {
+		err = stack.Down(
+			context.Background(),
+			compose.RemoveOrphans(true),
+			compose.RemoveVolumes(true),
+			compose.RemoveImagesLocal,
+		)
+		if err != nil {
+			t.Fatalf("failed to tear down compose stack: %v", err)
+		}
+	})
+
+	if err = stack.Up(ctx); err != nil {
+		t.Fatalf("failed to start compose stack: %v", err)
+	}
+
+	app, err := stack.ServiceContainer(ctx, "app")
+	assert.NoError(t, err)
+	assert.NotNil(t, app)
+
+	_, reader, err := app.Exec(ctx, []string{"./main", "generate-api-key", "--type", "admin", "--only-token", "true"})
+	assert.NoError(t, err)
+
+	buf := make([]byte, 4096)
+	_, err = reader.Read(buf)
+	assert.NoError(t, err)
+	token := strings.TrimSpace(string(buf))
+	assert.NotEmpty(t, token)
+
+	allTeams, teamUsers := prepareTestData(t, "http://localhost:8080", token)
+	assert.NotEmpty(t, allTeams)
+	assert.NotEmpty(t, teamUsers)
+}
+
+type teamMemberPayload struct {
+	UserID   string `json:"user_id"`
+	Username string `json:"username"`
+	IsActive bool   `json:"is_active"`
+}
+
+type teamAddPayload struct {
+	TeamName string              `json:"team_name"`
+	Members  []teamMemberPayload `json:"members"`
+}
+
+type prCreatePayload struct {
+	PRID   string `json:"pull_request_id"`
+	Name   string `json:"pull_request_name"`
+	Author string `json:"author_id"`
+}
+
+func prepareTestData(t *testing.T, baseURL string, token string) (allTeams []string, teamUsers map[string][]string) {
+	t.Helper()
+
+	teamUsers = make(map[string][]string)
+
+	numTeams := 70
+	userCount := 0
+
+	for i := 0; i < numTeams; i++ {
+		teamName := fmt.Sprintf("team-%d", i+1)
+
+		teamSize := rand.Intn(15) + 5
+
+		members := make([]teamMemberPayload, 0, teamSize)
+		userIDs := make([]string, 0, teamSize)
+
+		for j := 0; j < teamSize; j++ {
+			userID := fmt.Sprintf("u-%d-%d", i+1, j+1)
+			username := faker.Name()
+			members = append(members, teamMemberPayload{
+				UserID:   userID,
+				Username: username,
+				IsActive: true,
+			})
+			userIDs = append(userIDs, userID)
+			userCount++
+		}
+
+		body := teamAddPayload{
+			TeamName: teamName,
+			Members:  members,
+		}
+
+		doJSONRequest(t,
+			http.MethodPost,
+			baseURL+"/team/add",
+			token,
+			body,
+		)
+
+		allTeams = append(allTeams, teamName)
+		teamUsers[teamName] = userIDs
+	}
+
+	for teamName, users := range teamUsers {
+		for _, userID := range users {
+			prCount := rand.Intn(19) + 1
+
+			for k := 0; k < prCount; k++ {
+				prID := fmt.Sprintf("pr-%s-%s-%d", teamName, userID, k+1)
+				prName := faker.Sentence()
+
+				prBody := prCreatePayload{
+					PRID:   prID,
+					Name:   prName,
+					Author: userID,
+				}
+
+				doJSONRequest(t,
+					http.MethodPost,
+					baseURL+"/pullRequest/create",
+					token,
+					prBody,
+				)
+			}
+		}
+	}
+
+	return allTeams, teamUsers
+}
+
+func doJSONRequest(t *testing.T, method, url, token string, body any) *http.Response {
+	t.Helper()
+
+	var buf bytes.Buffer
+	if body != nil {
+		if err := json.NewEncoder(&buf).Encode(body); err != nil {
+			t.Fatalf("failed to marshal request body: %v", err)
+		}
+	}
+
+	req, err := http.NewRequest(method, url, &buf)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Api-Key", token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode >= 400 {
+		var b bytes.Buffer
+		_, _ = b.ReadFrom(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("request to %s failed: %s, body: %s", url, resp.Status, b.String())
+	}
+	return resp
+}

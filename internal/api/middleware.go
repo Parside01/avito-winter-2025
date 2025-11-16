@@ -35,9 +35,13 @@ func AuthMiddleware(types ...auth.TokenType) echo.MiddlewareFunc {
 			l := logger.FromContext(c.Request().Context())
 			l.Error("unauthorized access attempt", zap.Error(err))
 
-			return c.JSON(http.StatusUnauthorized, service.NewError(service.ErrorCodeUnauthorized, err.Error()))
+			response := struct {
+				Error *service.Error `json:"error"`
+			}{Error: service.NewError(service.ErrorCodeUnauthorized, err.Error())}
+
+			return c.JSON(http.StatusUnauthorized, response)
 		},
-		ContinueOnIgnoredError: true,
+		ContinueOnIgnoredError: false,
 	})
 }
 

@@ -84,6 +84,7 @@ func (p *pgxTeamRepository) GetTeamMembers(ctx context.Context, name string) ([]
 		sm.Columns("*"),
 		sm.From("users").As("u"),
 		sm.Where(psql.Quote("u", "team_name").EQ(psql.Arg(name))),
+		sm.ForShare("u"),
 	)
 
 	sql, args, err := q.Build(ctx)

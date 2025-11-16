@@ -3,3 +3,33 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    env_file:
+      - .env.test
+    ports:
+      - "8080:8080"
+    networks:
+      - default
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    healthcheck:
+      test: curl --fail http://localhost:8080/health || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+  postgres:
+    image: postgres:15
+    env_file:
+      - .env.test
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - default
+volumes:
+  pgdata:
+networks:
+  default:
+    driver: bridge

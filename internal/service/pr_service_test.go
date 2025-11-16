@@ -25,7 +25,7 @@ func TestPullRequestService_GetUserReview(t *testing.T) {
 			name:   "success: user has review PRs",
 			userID: "u1",
 			setupMocks: func(pr *MockPullRequestRepository) {
-				pr.On("GetReviewPRs", mock.Anything, "u1").Return([]*repository.PullRequest{
+				pr.On("GetReviewedPRs", mock.Anything, "u1").Return([]*repository.PullRequest{
 					{
 						ID:       "pr-1001",
 						AuthorID: "john",
@@ -47,7 +47,7 @@ func TestPullRequestService_GetUserReview(t *testing.T) {
 			name:   "success: no PRs for user",
 			userID: "u2",
 			setupMocks: func(pr *MockPullRequestRepository) {
-				pr.On("GetReviewPRs", mock.Anything, "u2").Return([]*repository.PullRequest{}, nil)
+				pr.On("GetReviewedPRs", mock.Anything, "u2").Return([]*repository.PullRequest{}, nil)
 			},
 			expectedError: false,
 			expectedPRs:   0,
@@ -56,7 +56,7 @@ func TestPullRequestService_GetUserReview(t *testing.T) {
 			name:   "failure repository error",
 			userID: "u3",
 			setupMocks: func(pr *MockPullRequestRepository) {
-				pr.On("GetReviewPRs", mock.Anything, "u3").Return(nil, errors.New("db error"))
+				pr.On("GetReviewedPRs", mock.Anything, "u3").Return(nil, errors.New("db error"))
 			},
 			expectedError: true,
 			errorCode:     ErrorCodeUnspecified,

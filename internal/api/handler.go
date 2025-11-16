@@ -10,6 +10,7 @@ import (
 	"github.com/yakoovad/avito-winter-2025/pkg/logger"
 	"go.uber.org/zap"
 	"net/http"
+	"time"
 )
 
 type Handler struct {
@@ -56,19 +57,84 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	e.Use(middleware.CORS())
 
 	e.GET("/health", h.healthChecker.HealthCheck())
+	//e.POST("/token/generate", h.GenerateToken)
 
-	userSecurity := e.Group("", AuthMiddleware(auth.TokenTypeUser, auth.TokenTypeAdmin))
+	e.GET("/team/get", h.GetTeam, AuthMiddleware(auth.TokenTypeUser, auth.TokenTypeAdmin))
+	e.GET("/users/getReview", h.GetUserReview, AuthMiddleware(auth.TokenTypeUser, auth.TokenTypeAdmin))
+	e.GET("/stats", h.GetStats, AuthMiddleware(auth.TokenTypeAdmin))
 
-	userSecurity.POST("/team/get", h.GetTeam)
-	userSecurity.GET("/users/getReview", h.GetUserReview)
+	e.POST("/team/add", h.AddTeam, AuthMiddleware(auth.TokenTypeAdmin))
+	e.POST("/team/deactivateMembers", h.DeactivateTeamMembers, AuthMiddleware(auth.TokenTypeAdmin))
 
-	adminSecurity := e.Group("", AuthMiddleware(auth.TokenTypeAdmin))
+	e.POST("/users/setIsActive", h.SetUserIsActive, AuthMiddleware(auth.TokenTypeAdmin))
+	e.POST("/pullRequest/create", h.CreatePullRequest, AuthMiddleware(auth.TokenTypeAdmin))
+	e.POST("/pullRequest/merge", h.MergePullRequest, AuthMiddleware(auth.TokenTypeAdmin))
+	e.POST("/pullRequest/reassign", h.ReassignPullRequest, AuthMiddleware(auth.TokenTypeAdmin))
+}
 
-	adminSecurity.POST("/team/add", h.AddTeam)
-	adminSecurity.POST("/users/setIsActive", h.SetUserIsActive)
-	adminSecurity.POST("/pullRequest/create", h.CreatePullRequest)
-	adminSecurity.POST("/pullRequest/merge", h.MergePullRequest)
-	adminSecurity.POST("/pullRequest/reassign", h.ReassignPullRequest)
+func (h *Handler) DeactivateTeamMembers(e echo.Context) error {
+	l := logger.FromContext(e.Request().Context())
+
+	var req struct {
+		TeamName string   `json:"team_name" validate:"required"`
+		Users    []string `json:"users" validate:"required,min=1"`
+	}
+
+	if err := h.decodeRequest(e, &req); err != nil {
+		l.Error("invalid request", zap.Any("error", err))
+		return h.transportError(e, err)
+	}
+
+	l.Info("deactivating team members",
+		zap.String("team_name", req.TeamName),
+		zap.Strings("users", req.Users))
+
+	if err := h.pr.DeactivateTeamMembers(e.Request().Context(), req.TeamName, req.Users); err != nil {
+		l.Error("failed to deactivate team members",
+			zap.String("team_name", req.TeamName),
+			zap.Any("error", err))
+		return h.transportError(e, err)
+	}
+
+	return e.NoContent(http.StatusOK)
+}
+
+func (h *Handler) GenerateToken(e echo.Context) error {
+	l := logger.FromContext(e.Request().Context())
+
+	var req struct {
+		Type     auth.TokenType `json:"type" validate:"required,oneof=user admin"`
+		Duration time.Duration  `json:"duration" validate:"required,gt=0"`
+	}
+
+	if err := h.decodeRequest(e, &req); err != nil {
+		l.Error("invalid request", zap.Any("error", err))
+		return h.transportError(e, err)
+	}
+
+	l.Info("generating token", zap.String("type", string(req.Type)), zap.Duration("duration", req.Duration))
+
+	token, err := auth.GenerateToken(req.Type, req.Duration)
+	if err != nil {
+		l.Error("failed to generate token", zap.Any("error", err))
+		return h.transportError(e, service.NewError(service.ErrorCodeUnspecified, "failed to generate token"))
+	}
+
+	return e.JSON(http.StatusOK, token)
+}
+
+func (h *Handler) GetStats(e echo.Context) error {
+	l := logger.FromContext(e.Request().Context())
+
+	l.Info("getting statistics")
+
+	stats, err := h.pr.GetStats(e.Request().Context())
+	if err != nil {
+		l.Error("failed to get statistics", zap.Any("error", err))
+		return h.transportError(e, err)
+	}
+
+	return e.JSON(http.StatusOK, stats)
 }
 
 func (h *Handler) GetUserReview(e echo.Context) error {
@@ -208,7 +274,7 @@ func (h *Handler) AddTeam(e echo.Context) error {
 
 	team := &model.Team{}
 
-	if err := h.decodeRequest(e, &team); err != nil {
+	if err := h.decodeRequest(e, team); err != nil {
 		l.Error("invalid request", zap.Any("error", err))
 		return h.transportError(e, err)
 	}

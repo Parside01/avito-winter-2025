@@ -27,29 +27,54 @@ func NewUserService(tx db.Transactor) *UserService {
 func (u *UserService) SetUserIsActive(ctx context.Context, userID string, isActive bool) (*model.User, *Error) {
 	l := logger.FromContext(ctx)
 
-	l.Info("setting user active status", zap.String("user_id", userID), zap.Bool("is_active", isActive))
+	l.Info("setting user active status",
+		zap.String("user_id", userID),
+		zap.Bool("is_active", isActive))
 
-	user, err := u.users.Patch(ctx, &repository.UserPatch{
-		ID:       userID,
-		IsActive: &isActive,
+	var result *model.User
+
+	err := u.tx.WithinTransaction(ctx, func(txCtx context.Context) error {
+		user, err := u.users.Patch(txCtx, &repository.UserPatch{
+			ID:       userID,
+			IsActive: &isActive,
+		})
+		if errors.Is(err, repository.ErrNotFound) {
+			l.Warn("user not found", zap.String("user_id", userID))
+			return NewError(ErrorCodeNotFound, "user not found")
+		}
+		if err != nil {
+			l.Error("failed to patch user", zap.String("user_id", userID), zap.Error(err))
+			return NewError(ErrorCodeUnspecified, "failed to update user")
+		}
+
+		if !isActive {
+			if err = u.reviews.UnassignFromOpenPRs(txCtx, userID); err != nil {
+				l.Error("failed to unassign user from open PRs",
+					zap.String("user_id", userID),
+					zap.Error(err),
+				)
+				return NewError(ErrorCodeUnspecified, "failed to unassign user from open PRs")
+			}
+		}
+
+		result = &model.User{
+			ID:       user.ID,
+			Username: user.Username,
+			IsActive: user.IsActive,
+			TeamName: user.TeamName,
+		}
+
+		l.Debug("user active status updated successfully",
+			zap.String("user_id", userID),
+			zap.Bool("is_active", isActive),
+		)
+
+		return nil
 	})
-	if errors.Is(err, repository.ErrNotFound) {
-		l.Warn("user not found", zap.String("user_id", userID))
-		return nil, NewError(ErrorCodeNotFound, "user not found")
-	}
-	if err != nil {
-		l.Error("failed to patch user", zap.String("user_id", userID), zap.Error(err))
-		return nil, NewError(ErrorCodeUnspecified, "failed to update user")
-	}
 
-	l.Debug("user active status updated successfully", zap.String("user_id", userID), zap.Bool("is_active", isActive))
-
-	return &model.User{
-		ID:       user.ID,
-		Username: user.Username,
-		IsActive: user.IsActive,
-		TeamName: user.TeamName,
-	}, nil
+	var se *Error
+	errors.As(err, &se)
+	return result, se
 }
 
 func (u *UserService) WithUserRepo(userRepo repository.UserRepository) *UserService {

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -35,12 +36,21 @@ type PullRequestPatch struct {
 	NeedMoreReviewers *bool           `db:"need_more_reviewers"`
 }
 
+type ReviewAssignment struct {
+	PRID     string
+	AuthorID string
+	Status   model.PRStatus
+	UserIDs  []string
+}
+
 type PullRequestRepository interface {
 	Create(ctx context.Context, pr *PullRequest) error
 	Patch(ctx context.Context, pr *PullRequestPatch) (*PullRequest, error)
 	Get(ctx context.Context, prID string) (*PullRequest, error)
 	GetReviewers(ctx context.Context, prID string) ([]string, error)
-	GetReviewPRs(ctx context.Context, userID string) ([]*PullRequest, error)
+	GetReviewedPRs(ctx context.Context, userID string) ([]*PullRequest, error)
+	GetStats(ctx context.Context) (*model.Stats, error)
+	GetReviewAssignments(ctx context.Context, users []string) ([]*ReviewAssignment, error)
 }
 
 type pgxPullRequestRepository struct {
@@ -51,7 +61,58 @@ func NewPgxPullRequestRepository(pool *pgxpool.Pool) PullRequestRepository {
 	return &pgxPullRequestRepository{pool: pool}
 }
 
-func (p *pgxPullRequestRepository) GetReviewPRs(ctx context.Context, userID string) ([]*PullRequest, error) {
+// GetReviewAssignments returns pull requests assigned to users (merged + open!)
+func (p *pgxPullRequestRepository) GetReviewAssignments(ctx context.Context, users []string) ([]*ReviewAssignment, error) {
+	// if len(users) == 0, this is a strange premature optimization
+	e := db.GetPgxExecutorFromContext(ctx, p.pool)
+
+	q := psql.Select(
+		sm.Columns(
+			psql.Quote("pr", "id"),
+			psql.Quote("pr", "author_id"),
+			psql.Quote("pr", "name"),
+			psql.Quote("pr", "status"),
+			psql.F("ARRAY_AGG", psql.Quote("r", "user_id")),
+			sm.From("review").As("r"),
+			sm.LeftJoin("pull_request").As("pr").On(psql.Quote("r", "pull_request_id").EQ(psql.Quote("pr", "id"))),
+			sm.Where(
+				psql.Quote("user_id").In(psql.Arg(users)).
+					And(psql.Quote("pull_request", "status"))),
+			sm.GroupBy([]any{
+				psql.Quote("pr", "id"),
+				psql.Quote("pr", "author_id"),
+				psql.Quote("pr", "name"),
+				psql.Quote("pr", "status"),
+			},
+			),
+			sm.ForShare("review")))
+
+	sql, args, err := q.Build(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Println(sql)
+
+	rows, err := e.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	reviews, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (*ReviewAssignment, error) {
+		ra := &ReviewAssignment{}
+		err = row.Scan(&ra.PRID, &ra.AuthorID, &ra.Status, &ra.UserIDs)
+		return ra, err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return reviews, nil
+}
+
+func (p *pgxPullRequestRepository) GetReviewedPRs(ctx context.Context, userID string) ([]*PullRequest, error) {
 	e := db.GetPgxExecutorFromContext(ctx, p.pool)
 
 	q := psql.Select(
@@ -235,4 +296,105 @@ func (p *pgxPullRequestRepository) Patch(ctx context.Context, patch *PullRequest
 		return nil, err
 	}
 	return pr, nil
+}
+
+// GetStats Я полностью осознаю, что этот метод очень тяжелый и его надо распилить + везде использовал bob, а тут чистый sql😶‍🌫️
+// Но как это красиво сделать с bob я пока не придумал, а времени уже мало.... Просто пришел к тому что надо слать батчями хотя бы...
+func (p *pgxPullRequestRepository) GetStats(ctx context.Context) (*model.Stats, error) {
+	e := db.GetPgxExecutorFromContext(ctx, p.pool)
+	batch := &pgx.Batch{}
+
+	const (
+		totalPRsQuery = `
+		SELECT COUNT(*) 
+		FROM pull_request 
+		WHERE status = 'OPEN';`
+
+		totalAssignmentsQuery = `
+		SELECT COUNT(r.user_id)
+		FROM review r
+		JOIN pull_request pr ON r.pull_request_id = pr.id
+		WHERE pr.status = 'OPEN';`
+
+		userAssignmentsQuery = `
+		WITH open_reviews AS (SELECT r.user_id, COUNT(r.pull_request_id) AS assignments_count
+		  FROM review r
+				   JOIN pull_request pr ON r.pull_request_id = pr.id
+		  WHERE pr.status = 'OPEN'
+		  GROUP BY r.user_id
+		)
+		SELECT
+			u.id AS user_id,
+			u.username,
+			COALESCE(open_reviews.assignments_count, 0) AS assignments_count
+		FROM users u
+		LEFT JOIN open_reviews ON u.id = open_reviews.user_id
+		WHERE u.is_active = TRUE`
+
+		reviewsRPQuery = `
+		SELECT
+			pr.id AS pull_request_id,
+			pr.name AS pull_request_name,
+			COUNT(r.user_id) AS reviewers_count
+		FROM pull_request pr
+		LEFT JOIN review r ON pr.id = r.pull_request_id
+		WHERE pr.status = 'OPEN'
+		GROUP BY pr.id, pr.name`
+	)
+
+	batch.Queue(totalPRsQuery)
+	batch.Queue(totalAssignmentsQuery)
+	batch.Queue(userAssignmentsQuery)
+	batch.Queue(reviewsRPQuery)
+
+	br := e.SendBatch(ctx, batch)
+	defer func() {
+		_ = br.Close()
+	}()
+
+	var totalPRs int
+	var totalAssignments int
+	var userAssignments []*model.UserAssignments
+	var reviewsPRs []*model.ReviewsPR
+
+	if err := br.QueryRow().Scan(&totalPRs); err != nil {
+		return nil, err
+	}
+
+	if err := br.QueryRow().Scan(&totalAssignments); err != nil {
+		return nil, err
+	}
+
+	rowsUserStats, err := br.Query()
+	if err != nil {
+		return nil, err
+	}
+	userAssignments, err = pgx.CollectRows(rowsUserStats, func(row pgx.CollectableRow) (*model.UserAssignments, error) {
+		us := &model.UserAssignments{}
+		err = row.Scan(&us.UserID, &us.Username, &us.AssignmentsCount)
+		return us, err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	rowsPRStats, err := br.Query()
+	if err != nil {
+		return nil, err
+	}
+	reviewsPRs, err = pgx.CollectRows(rowsPRStats, func(row pgx.CollectableRow) (*model.ReviewsPR, error) {
+		ps := &model.ReviewsPR{}
+		err = row.Scan(&ps.PullRequestID, &ps.PullRequestName, &ps.ReviewersCount)
+		return ps, err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.Stats{
+		TotalPRsCount:    totalPRs,
+		TotalAssignments: totalAssignments,
+		UserAssignments:  userAssignments,
+		ReviewsPR:        reviewsPRs,
+	}, nil
 }

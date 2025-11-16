@@ -26,13 +26,145 @@ func NewPullRequestService(tx db.Transactor) *PullRequestService {
 	}
 }
 
+func (p *PullRequestService) DeactivateTeamMembers(ctx context.Context, team string, users []string) *Error {
+	l := logger.FromContext(ctx)
+
+	l.Info("deactivating team members",
+		zap.String("team_name", team),
+		zap.Strings("user_ids", users),
+	)
+
+	err := p.tx.WithinTransaction(ctx, func(txCtx context.Context) error {
+		membersRepo, err := p.teams.GetTeamMembers(txCtx, team)
+		if err != nil {
+			l.Error("failed to get team members", zap.String("team_name", team), zap.Error(err))
+			return NewError(ErrorCodeUnspecified, "failed to get team members")
+		}
+
+		members := make([]*model.TeamMember, 0, len(membersRepo))
+		membersSet := make(map[string]struct{})
+		for _, member := range membersRepo {
+			membersSet[member.ID] = struct{}{}
+			members = append(members, &model.TeamMember{
+				UserID:   member.ID,
+				Username: member.Username,
+				IsActive: member.IsActive,
+			})
+		}
+
+		inactiveUsers := make(map[string]struct{}, len(users))
+		for _, userID := range users {
+			inactiveUsers[userID] = struct{}{}
+			if _, exists := membersSet[userID]; !exists {
+				l.Warn("user not found in the team", zap.String("team_name", team), zap.String("user_id", userID))
+				return NewError(ErrorCodeNotFound, "user not found in the team")
+			}
+		}
+
+		candidates := make(map[string]struct{})
+		for _, member := range members {
+			if !member.IsActive {
+				inactiveUsers[member.UserID] = struct{}{}
+				continue
+			}
+			if _, toDeactivate := inactiveUsers[member.UserID]; !toDeactivate {
+				continue
+			}
+			candidates[member.UserID] = struct{}{}
+		}
+
+		assignments, err := p.prs.GetReviewAssignments(txCtx, users)
+		if err != nil {
+			l.Error("failed to get reviewer PRs", zap.Strings("user_ids", users), zap.Error(err))
+			return NewError(ErrorCodeUnspecified, "failed to get reviewer PRs")
+		}
+
+		prSet := make(map[string]struct{})
+		newReviewers := make(map[string][]string) // prID -> []newReviewerIDs
+		for _, a := range assignments {
+			prID := a.PRID
+
+			if _, exists := prSet[prID]; exists {
+				continue
+			}
+			prSet[prID] = struct{}{}
+
+			if a.Status == model.PRStatusMerged {
+				continue
+			}
+
+			// Check how many reviewers need to be reassigned, they are inactive
+			oldReviewers := a.UserIDs
+			reassignCount := 0
+			for _, r := range oldReviewers {
+				if _, inactive := inactiveUsers[r]; inactive {
+					reassignCount++
+				}
+			}
+
+			selectedReviewers := p.selectReviewers(a.AuthorID, candidates, reassignCount)
+			l.Debug("new reviewers for pr selected",
+				zap.String("pull_request_id", prID),
+				zap.Strings("old_reviewers", oldReviewers),
+				zap.Strings("new_reviewers", selectedReviewers))
+
+			newReviewers[prID] = selectedReviewers
+		}
+
+		isActive := false
+		for _, userID := range users {
+			_, err = p.users.Patch(txCtx, &repository.UserPatch{
+				ID:       userID,
+				IsActive: &isActive,
+			})
+			if err != nil {
+				l.Error("failed to patch user", zap.String("user_id", userID), zap.Error(err))
+				return NewError(ErrorCodeUnspecified, "failed to update user")
+			}
+
+			err = p.reviews.UnassignFromOpenPRs(txCtx, userID)
+			if err != nil {
+				l.Error("failed to unassign user from open PRs",
+					zap.String("user_id", userID),
+					zap.Error(err),
+				)
+				return NewError(ErrorCodeUnspecified, "failed to unassign user from open PRs")
+			}
+		}
+
+		for prID, reviewers := range newReviewers {
+			for _, reviewerID := range reviewers {
+				if reviewerID == "" {
+					continue
+				}
+				err = p.reviews.Assign(txCtx, prID, []string{reviewerID})
+				if err != nil {
+					l.Error("failed to assign new reviewer",
+						zap.String("pull_request_id", prID),
+						zap.String("new_reviewer", reviewerID),
+						zap.Error(err),
+					)
+					return NewError(ErrorCodeUnspecified, "failed to assign new reviewer")
+				}
+			}
+		}
+
+		return nil
+	})
+
+	var res *Error
+	errors.As(err, &res)
+
+	return res
+}
+
 func (p *PullRequestService) GetUserReview(ctx context.Context, userID string) (*model.UserReviews, *Error) {
 	l := logger.FromContext(ctx)
 	l.Info("getting user reviews", zap.String("user_id", userID))
 
 	prs := make([]*model.PullRequestShort, 0)
 
-	repoPRs, err := p.prs.GetReviewPRs(ctx, userID)
+	repoPRs, err := p.prs.GetReviewedPRs(ctx, userID)
 	if err != nil {
 		l.Error("failed to get user review PRs", zap.String("user_id", userID), zap.Error(err))
 		return nil, NewError(ErrorCodeUnspecified, "failed to get user reviews")
@@ -195,6 +327,20 @@ func (p *PullRequestService) MergePullRequest(ctx context.Context, prID string) 
 	return pr, res
 }
 
+func (p *PullRequestService) GetStats(ctx context.Context) (*model.Stats, *Error) {
+	l := logger.FromContext(ctx)
+	l.Info("getting statistics")
+
+	stats, err := p.prs.GetStats(ctx)
+	if err != nil {
+		l.Error("failed to get statistics", zap.Error(err))
+		return nil, NewError(ErrorCodeUnspecified, "failed to get statistics")
+	}
+
+	l.Debug("statistics retrieved successfully")
+	return stats, nil
+}
+
 // CreatePullRequest Create a new pull request and assign two team members as reviewers
 func (p *PullRequestService) CreatePullRequest(ctx context.Context, short *model.PullRequestShort) (*model.PullRequest, *Error) {
 	l := logger.FromContext(ctx)
@@ -248,7 +394,14 @@ func (p *PullRequestService) CreatePullRequest(ctx context.Context, short *model
 			return NewError(ErrorCodeUnspecified, "failed to create PR")
 		}
 
-		reviewers := p.selectReviewers(short.AuthorID, team, 2)
+		activeUsers := make(map[string]struct{})
+		for _, member := range team {
+			if member.IsActive {
+				activeUsers[member.ID] = struct{}{}
+			}
+		}
+
+		reviewers := p.selectReviewers(short.AuthorID, activeUsers, 2)
 
 		err = p.reviews.Assign(txCtx, repoPR.ID, reviewers)
 		if err != nil {
@@ -297,15 +450,14 @@ func (p *PullRequestService) selectReplacementReviewer(authorID string, reviewer
 	return ""
 }
 
-// selectReviewers Selects up to `max` active reviewers from team and returns their IDs
-func (p *PullRequestService) selectReviewers(author string, team []*model.User, max int) []string {
+func (p *PullRequestService) selectReviewers(author string, candidates map[string]struct{}, max int) []string {
 	reviewers := make([]string, 0, max)
-	for _, member := range team {
-		if member.ID == author || !member.IsActive {
+	for candidate, _ := range candidates {
+		if candidate == author {
 			continue
 		}
 
-		reviewers = append(reviewers, member.ID)
+		reviewers = append(reviewers, candidate)
 
 		if len(reviewers) == max {
 			break

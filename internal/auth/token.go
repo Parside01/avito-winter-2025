@@ -4,15 +4,15 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/pkg/errors"
 	"os"
+	"strings"
 	"time"
 )
 
 type TokenType string
 
 const (
-	TokenTypeUndefined TokenType = ""
-	TokenTypeUser      TokenType = "user"
-	TokenTypeAdmin     TokenType = "admin"
+	TokenTypeUser  TokenType = "user"
+	TokenTypeAdmin TokenType = "admin"
 )
 
 var TokenSecretKey = os.Getenv("TOKEN_AUTH_SECRET")
@@ -22,11 +22,21 @@ type TokenClaims struct {
 	jwt.RegisteredClaims
 }
 
-func GenerateToken(tokenType TokenType, dur time.Duration) (string, error) {
+func ParseTokenType(t string) TokenType {
+	switch strings.ToLower(t) {
+	case "user":
+		return TokenTypeUser
+	case "admin":
+		return TokenTypeAdmin
+	}
+	return TokenTypeUser
+}
+
+func GenerateToken(tokenType TokenType, ttl time.Duration) (string, error) {
 	claims := TokenClaims{
 		Type: tokenType,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(dur)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(ttl)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
