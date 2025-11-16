@@ -69,9 +69,9 @@ func printMetrics(t *testing.T) {
 		if m.Total == 0 {
 			continue
 		}
-		avg := float64(httpMetrics.data[ep].Count) / float64(httpMetrics.data[ep].Count)
+		avg := float64(httpMetrics.data[ep].Total) / float64(httpMetrics.data[ep].Count)
 		successRate := (float64(m.Count) / float64(m.Total)) * 100.0
-		t.Logf("endpoint=%s success=%d total=%d success_rate=%.2f%%, avg_time=%.2f%%ms", ep, m.Count, m.Total, successRate, avg)
+		t.Logf("endpoint=%s success=%d total=%d success_rate=%.2f%%, avg_time=%.2fms", ep, m.Count, m.Total, successRate, avg)
 	}
 }
 
