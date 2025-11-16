@@ -16,8 +16,41 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 	"unicode"
 )
+
+type metric struct {
+	Count int64
+	Total int64 // суммарная задержка в мс
+}
+
+var httpMetrics = struct {
+	data map[string]*metric
+}{
+	data: make(map[string]*metric),
+}
+
+func recordMetric(endpoint string, durationMs int64) {
+	m, ok := httpMetrics.data[endpoint]
+	if !ok {
+		m = &metric{}
+		httpMetrics.data[endpoint] = m
+	}
+	m.Count++
+	m.Total += durationMs
+}
+
+func printMetrics(t *testing.T) {
+	t.Log("--- http metrics (avg ms) ---")
+	for ep, m := range httpMetrics.data {
+		if m.Count == 0 {
+			continue
+		}
+		avg := float64(m.Total) / float64(m.Count)
+		t.Logf("endpoint=%s count=%d avg=%.1fms", ep, m.Count, avg)
+	}
+}
 
 type DeactivateMembersRequest struct {
 	Team    string   `json:"team_name"`
@@ -43,6 +76,8 @@ func TestLoad_TeamDeactivateMembers(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
+		printMetrics(t)
+
 		err = stack.Down(
 			context.Background(),
 			compose.RemoveOrphans(true),
@@ -201,18 +236,24 @@ func doJSONRequest(t *testing.T, method, url, token string, body any) *http.Resp
 		t.Fatalf("failed to create request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	t.Logf("Making %s request to %s", method, url)
 	req.Header.Set("X-Api-Key", token)
 
+	start := time.Now()
+
 	resp, err := http.DefaultClient.Do(req)
+	elapsed := time.Since(start).Milliseconds()
+	recordMetric(url, elapsed)
+
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
+
 	if resp.StatusCode >= 400 {
 		var b bytes.Buffer
 		_, _ = b.ReadFrom(resp.Body)
 		_ = resp.Body.Close()
 		t.Fatalf("request to %s failed: %s, body: %s", url, resp.Status, b.String())
 	}
+	t.Logf("Success %s request to %s, time: %d ms", method, url, time.Since(start).Milliseconds())
 	return resp
 }
