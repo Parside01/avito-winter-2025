@@ -15,7 +15,7 @@ func TestUserService_SetUserIsActive(t *testing.T) {
 		name          string
 		userID        string
 		isActive      bool
-		setupMocks    func(*MockUserRepository)
+		setupMocks    func(*MockTransactor, *MockUserRepository, *MockReviewRepository)
 		expectedError bool
 		errorCode     model.ErrorCode
 		expectedUser  *model.User
@@ -24,7 +24,13 @@ func TestUserService_SetUserIsActive(t *testing.T) {
 			name:     "success activate",
 			userID:   "user1",
 			isActive: true,
-			setupMocks: func(ur *MockUserRepository) {
+			setupMocks: func(mockTx *MockTransactor, ur *MockUserRepository, rw *MockReviewRepository) {
+				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						fn := args.Get(1).(func(context.Context) error)
+						_ = fn(args.Get(0).(context.Context))
+					}).Return(nil)
+
 				isActive := true
 				ur.On("Patch", mock.Anything, &repository.UserPatch{
 					ID:       "user1",
@@ -35,6 +41,8 @@ func TestUserService_SetUserIsActive(t *testing.T) {
 					IsActive: true,
 					TeamName: "backend",
 				}, nil)
+
+				rw.On("UnassignFromOpenPRs", mock.Anything, "user1").Return(nil)
 			},
 			expectedError: false,
 			expectedUser: &model.User{
@@ -48,7 +56,13 @@ func TestUserService_SetUserIsActive(t *testing.T) {
 			name:     "success deactivate",
 			userID:   "user1",
 			isActive: false,
-			setupMocks: func(ur *MockUserRepository) {
+			setupMocks: func(mockTx *MockTransactor, ur *MockUserRepository, rw *MockReviewRepository) {
+				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						fn := args.Get(1).(func(context.Context) error)
+						_ = fn(args.Get(0).(context.Context))
+					}).Return(nil)
+
 				isActive := false
 				ur.On("Patch", mock.Anything, &repository.UserPatch{
 					ID:       "user1",
@@ -59,6 +73,8 @@ func TestUserService_SetUserIsActive(t *testing.T) {
 					IsActive: false,
 					TeamName: "backend",
 				}, nil)
+
+				rw.On("UnassignFromOpenPRs", mock.Anything, "user1").Return(nil)
 			},
 			expectedError: false,
 			expectedUser: &model.User{
@@ -72,7 +88,12 @@ func TestUserService_SetUserIsActive(t *testing.T) {
 			name:     "user not found",
 			userID:   "unknown",
 			isActive: true,
-			setupMocks: func(ur *MockUserRepository) {
+			setupMocks: func(mockTx *MockTransactor, ur *MockUserRepository, rw *MockReviewRepository) {
+				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						fn := args.Get(1).(func(context.Context) error)
+						_ = fn(args.Get(0).(context.Context))
+					}).Return(nil)
 				ur.On("Patch", mock.Anything, mock.Anything).Return(nil, repository.ErrNotFound)
 			},
 			expectedError: true,
@@ -82,7 +103,12 @@ func TestUserService_SetUserIsActive(t *testing.T) {
 			name:     "patch failed",
 			userID:   "user1",
 			isActive: true,
-			setupMocks: func(ur *MockUserRepository) {
+			setupMocks: func(mockTx *MockTransactor, ur *MockUserRepository, rw *MockReviewRepository) {
+				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						fn := args.Get(1).(func(context.Context) error)
+						_ = fn(args.Get(0).(context.Context))
+					}).Return(nil)
 				ur.On("Patch", mock.Anything, mock.Anything).Return(nil, errors.New("db error"))
 			},
 			expectedError: true,
@@ -94,11 +120,12 @@ func TestUserService_SetUserIsActive(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockTx := new(MockTransactor)
 			mockUserRepo := new(MockUserRepository)
+			mockReviewRepo := new(MockReviewRepository)
 
-			tt.setupMocks(mockUserRepo)
+			tt.setupMocks(mockTx, mockUserRepo, mockReviewRepo)
 
 			service := NewUserService(mockTx).
-				WithUserRepo(mockUserRepo)
+				WithUserRepo(mockUserRepo).WithReviewRepo(mockReviewRepo)
 
 			got, err := service.SetUserIsActive(context.Background(), tt.userID, tt.isActive)
 

@@ -235,6 +235,10 @@ func (p *PullRequestService) ReassignPullRequest(ctx context.Context, prID, user
 		}
 
 		reviewers, err := p.prs.GetReviewers(txCtx, prID)
+		if errors.Is(err, repository.ErrNotFound) {
+			l.Warn("no reviewers found for PR", zap.String("pull_request_id", prID))
+			return model.NewError(model.ErrorCodeNotFound, "no reviewers found for PR")
+		}
 		if err != nil {
 			l.Error("failed to get reviewers", zap.String("pull_request_id", prID), zap.Error(err))
 			return model.NewError(model.ErrorCodeUnspecified, "failed to get reviewers")

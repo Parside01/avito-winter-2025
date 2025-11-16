@@ -14,7 +14,7 @@ func TestTeamService_GetTeam(t *testing.T) {
 	tests := []struct {
 		name          string
 		teamName      string
-		setupMocks    func(*MockTeamRepository)
+		setupMocks    func(*MockTransactor, *MockTeamRepository)
 		expectedError bool
 		errorCode     model.ErrorCode
 		expectedTeam  *model.Team
@@ -22,7 +22,12 @@ func TestTeamService_GetTeam(t *testing.T) {
 		{
 			name:     "success",
 			teamName: "backend",
-			setupMocks: func(tr *MockTeamRepository) {
+			setupMocks: func(mockTx *MockTransactor, tr *MockTeamRepository) {
+				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						fn := args.Get(1).(func(context.Context) error)
+						_ = fn(args.Get(0).(context.Context))
+					}).Return(nil)
 				tr.On("Get", mock.Anything, "backend").Return(&repository.Team{Name: "backend"}, nil)
 				tr.On("GetTeamMembers", mock.Anything, "backend").Return([]*repository.User{
 					{ID: "user1", Username: "john", IsActive: true},
@@ -41,7 +46,12 @@ func TestTeamService_GetTeam(t *testing.T) {
 		{
 			name:     "team not found",
 			teamName: "backend",
-			setupMocks: func(tr *MockTeamRepository) {
+			setupMocks: func(mockTx *MockTransactor, tr *MockTeamRepository) {
+				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						fn := args.Get(1).(func(context.Context) error)
+						_ = fn(args.Get(0).(context.Context))
+					}).Return(nil)
 				tr.On("Get", mock.Anything, "backend").Return(nil, repository.ErrNotFound)
 			},
 			expectedError: true,
@@ -50,7 +60,12 @@ func TestTeamService_GetTeam(t *testing.T) {
 		{
 			name:     "get team failure",
 			teamName: "backend",
-			setupMocks: func(tr *MockTeamRepository) {
+			setupMocks: func(mockTx *MockTransactor, tr *MockTeamRepository) {
+				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						fn := args.Get(1).(func(context.Context) error)
+						_ = fn(args.Get(0).(context.Context))
+					}).Return(nil)
 				tr.On("Get", mock.Anything, "backend").Return(nil, errors.New("db error"))
 			},
 			expectedError: true,
@@ -59,7 +74,13 @@ func TestTeamService_GetTeam(t *testing.T) {
 		{
 			name:     "get members failure",
 			teamName: "backend",
-			setupMocks: func(tr *MockTeamRepository) {
+			setupMocks: func(mockTx *MockTransactor, tr *MockTeamRepository) {
+				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						fn := args.Get(1).(func(context.Context) error)
+						_ = fn(args.Get(0).(context.Context))
+					}).Return(nil)
+
 				tr.On("Get", mock.Anything, "backend").Return(&repository.Team{Name: "backend"}, nil)
 				tr.On("GetTeamMembers", mock.Anything, "backend").Return(nil, errors.New("db error"))
 			},
@@ -73,7 +94,7 @@ func TestTeamService_GetTeam(t *testing.T) {
 			mockTx := new(MockTransactor)
 			mockTeamRepo := new(MockTeamRepository)
 
-			tt.setupMocks(mockTeamRepo)
+			tt.setupMocks(mockTx, mockTeamRepo)
 
 			service := NewTeamService(mockTx).
 				WithTeamRepo(mockTeamRepo)
@@ -99,7 +120,7 @@ func TestTeamService_AddTeam(t *testing.T) {
 	tests := []struct {
 		name          string
 		team          *model.Team
-		setupMocks    func(*MockTeamRepository, *MockUserRepository)
+		setupMocks    func(*MockTransactor, *MockTeamRepository, *MockUserRepository)
 		expectedError bool
 		errorCode     model.ErrorCode
 	}{
@@ -112,12 +133,17 @@ func TestTeamService_AddTeam(t *testing.T) {
 					{UserID: "user2", Username: "jane", IsActive: true},
 				},
 			},
-			setupMocks: func(tr *MockTeamRepository, ur *MockUserRepository) {
+			setupMocks: func(mockTx *MockTransactor, tr *MockTeamRepository, ur *MockUserRepository) {
+				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						fn := args.Get(1).(func(context.Context) error)
+						_ = fn(args.Get(0).(context.Context))
+					}).Return(nil)
 				tr.On("Create", mock.Anything, mock.MatchedBy(func(t *repository.Team) bool {
 					return t.Name == "backend"
 				})).Return(nil)
 
-				ur.On("Upsert", mock.Anything, mock.Anything).Return(nil).Twice()
+				ur.On("Upsert", mock.Anything, mock.Anything).Return(nil)
 			},
 			expectedError: false,
 		},
@@ -127,7 +153,12 @@ func TestTeamService_AddTeam(t *testing.T) {
 				Name:    "existing-team",
 				Members: []*model.TeamMember{},
 			},
-			setupMocks: func(tr *MockTeamRepository, ur *MockUserRepository) {
+			setupMocks: func(mockTx *MockTransactor, tr *MockTeamRepository, ur *MockUserRepository) {
+				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						fn := args.Get(1).(func(context.Context) error)
+						_ = fn(args.Get(0).(context.Context))
+					}).Return(nil)
 				tr.On("Create", mock.Anything, mock.Anything).Return(repository.ErrAlreadyExists)
 			},
 			expectedError: true,
@@ -141,7 +172,13 @@ func TestTeamService_AddTeam(t *testing.T) {
 					{UserID: "user1", Username: "john", IsActive: true},
 				},
 			},
-			setupMocks: func(tr *MockTeamRepository, ur *MockUserRepository) {
+			setupMocks: func(mockTx *MockTransactor, tr *MockTeamRepository, ur *MockUserRepository) {
+				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						fn := args.Get(1).(func(context.Context) error)
+						_ = fn(args.Get(0).(context.Context))
+					}).Return(nil)
+
 				tr.On("Create", mock.Anything, mock.Anything).Return(nil)
 				ur.On("Upsert", mock.Anything, mock.Anything).Return(errors.New("db error"))
 			},
@@ -156,7 +193,7 @@ func TestTeamService_AddTeam(t *testing.T) {
 			mockTeamRepo := new(MockTeamRepository)
 			mockUserRepo := new(MockUserRepository)
 
-			tt.setupMocks(mockTeamRepo, mockUserRepo)
+			tt.setupMocks(mockTx, mockTeamRepo, mockUserRepo)
 
 			service := NewTeamService(mockTx).
 				WithTeamRepo(mockTeamRepo).

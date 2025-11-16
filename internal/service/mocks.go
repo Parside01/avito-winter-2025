@@ -12,6 +12,12 @@ type MockTransactor struct {
 }
 
 func (m *MockTransactor) WithinTransaction(ctx context.Context, fn func(context.Context) error) error {
+	args := m.Called(ctx, fn)
+
+	if len(args) > 0 && args.Get(0) != nil {
+		return args.Error(0)
+	}
+
 	return fn(ctx)
 }
 

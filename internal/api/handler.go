@@ -179,7 +179,7 @@ func (h *Handler) ReassignPullRequest(e echo.Context) error {
 		return h.transportError(e, err)
 	}
 
-	return e.JSON(http.StatusOK, pr)
+	return e.JSON(http.StatusOK, map[string]interface{}{"pr": pr})
 }
 
 func (h *Handler) MergePullRequest(e echo.Context) error {
@@ -238,7 +238,7 @@ func (h *Handler) CreatePullRequest(e echo.Context) error {
 		return h.transportError(e, err)
 	}
 
-	return e.JSON(http.StatusCreated, pr)
+	return e.JSON(http.StatusCreated, map[string]interface{}{"pr": pr})
 }
 
 func (h *Handler) SetUserIsActive(e echo.Context) error {

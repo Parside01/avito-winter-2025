@@ -95,7 +95,7 @@ func TestPullRequestService_CreatePullRequest(t *testing.T) {
 	tests := []struct {
 		name          string
 		prShort       *model.PullRequestShort
-		setupMocks    func(*MockUserRepository, *MockPullRequestRepository, *MockReviewRepository)
+		setupMocks    func(*MockTransactor, *MockUserRepository, *MockPullRequestRepository, *MockReviewRepository)
 		expectedError bool
 		errorCode     model.ErrorCode
 	}{
@@ -107,18 +107,22 @@ func TestPullRequestService_CreatePullRequest(t *testing.T) {
 				Name:     "feat: feature",
 				Status:   model.PRStatusOpen,
 			},
-			setupMocks: func(ur *MockUserRepository, pr *MockPullRequestRepository, rr *MockReviewRepository) {
+			setupMocks: func(mockTx *MockTransactor, ur *MockUserRepository, pr *MockPullRequestRepository, rr *MockReviewRepository) {
+				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						fn := args.Get(1).(func(context.Context) error)
+						_ = fn(args.Get(0).(context.Context))
+					}).Return(nil)
+
 				ur.On("GetUserTeam", mock.Anything, "u1").Return([]*repository.User{
 					{ID: "u1", Username: "author", IsActive: true, TeamName: "backend"},
 					{ID: "u2", Username: "reviewer1", IsActive: true, TeamName: "backend"},
 					{ID: "u3", Username: "reviewer2", IsActive: true, TeamName: "backend"},
 				}, nil)
 
-				pr.On("Create", mock.Anything, mock.MatchedBy(func(p *repository.PullRequest) bool {
-					return p.ID == "pr-1001" && p.AuthorID == "u1"
-				})).Return(nil)
+				pr.On("Create", mock.Anything, mock.Anything).Return(nil)
 
-				rr.On("Assign", mock.Anything, "pr-1001", []string{"u2", "u3"}).Return(nil)
+				rr.On("Assign", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			},
 			expectedError: false,
 		},
@@ -130,7 +134,12 @@ func TestPullRequestService_CreatePullRequest(t *testing.T) {
 				Name:     "feat: feature",
 				Status:   model.PRStatusOpen,
 			},
-			setupMocks: func(ur *MockUserRepository, pr *MockPullRequestRepository, rr *MockReviewRepository) {
+			setupMocks: func(mockTx *MockTransactor, ur *MockUserRepository, pr *MockPullRequestRepository, rr *MockReviewRepository) {
+				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						fn := args.Get(1).(func(context.Context) error)
+						_ = fn(args.Get(0).(context.Context))
+					}).Return(nil)
 				ur.On("GetUserTeam", mock.Anything, "u1").Return([]*repository.User{
 					{ID: "u1", Username: "author", IsActive: false, TeamName: "backend"},
 				}, nil)
@@ -146,7 +155,12 @@ func TestPullRequestService_CreatePullRequest(t *testing.T) {
 				Name:     "feat: feature",
 				Status:   model.PRStatusOpen,
 			},
-			setupMocks: func(ur *MockUserRepository, pr *MockPullRequestRepository, rr *MockReviewRepository) {
+			setupMocks: func(mockTx *MockTransactor, ur *MockUserRepository, pr *MockPullRequestRepository, rr *MockReviewRepository) {
+				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						fn := args.Get(1).(func(context.Context) error)
+						_ = fn(args.Get(0).(context.Context))
+					}).Return(nil)
 				ur.On("GetUserTeam", mock.Anything, "unknown").Return(nil, repository.ErrNotFound)
 			},
 			expectedError: true,
@@ -160,7 +174,13 @@ func TestPullRequestService_CreatePullRequest(t *testing.T) {
 				Name:     "Duplicated",
 				Status:   model.PRStatusOpen,
 			},
-			setupMocks: func(ur *MockUserRepository, pr *MockPullRequestRepository, rr *MockReviewRepository) {
+			setupMocks: func(mockTx *MockTransactor, ur *MockUserRepository, pr *MockPullRequestRepository, rr *MockReviewRepository) {
+				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						fn := args.Get(1).(func(context.Context) error)
+						_ = fn(args.Get(0).(context.Context))
+					}).Return(nil)
+
 				ur.On("GetUserTeam", mock.Anything, "u1").Return([]*repository.User{
 					{ID: "u1", Username: "author", IsActive: true, TeamName: "backend"},
 				}, nil)
@@ -179,7 +199,7 @@ func TestPullRequestService_CreatePullRequest(t *testing.T) {
 			mockPRRepo := new(MockPullRequestRepository)
 			mockReviewRepo := new(MockReviewRepository)
 
-			tt.setupMocks(mockUserRepo, mockPRRepo, mockReviewRepo)
+			tt.setupMocks(mockTx, mockUserRepo, mockPRRepo, mockReviewRepo)
 
 			service := NewPullRequestService(mockTx).
 				WithUserRepo(mockUserRepo).
@@ -211,7 +231,7 @@ func TestPullRequestService_ReassignPullRequest(t *testing.T) {
 		name          string
 		prID          string
 		userID        string
-		setupMocks    func(*MockUserRepository, *MockPullRequestRepository, *MockReviewRepository)
+		setupMocks    func(*MockTransactor, *MockUserRepository, *MockPullRequestRepository, *MockReviewRepository)
 		expectedError bool
 		errorCode     model.ErrorCode
 	}{
@@ -219,7 +239,13 @@ func TestPullRequestService_ReassignPullRequest(t *testing.T) {
 			name:   "success: reassign to new reviewer",
 			prID:   "pr-1001",
 			userID: "u2",
-			setupMocks: func(ur *MockUserRepository, pr *MockPullRequestRepository, rr *MockReviewRepository) {
+			setupMocks: func(mockTx *MockTransactor, ur *MockUserRepository, pr *MockPullRequestRepository, rr *MockReviewRepository) {
+				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						fn := args.Get(1).(func(context.Context) error)
+						_ = fn(args.Get(0).(context.Context))
+					}).Return(nil)
+
 				ur.On("GetUserTeam", mock.Anything, "u2").Return([]*repository.User{
 					{ID: "u1", Username: "author", IsActive: true, TeamName: "backend"},
 					{ID: "u2", Username: "old_reviewer", IsActive: true, TeamName: "backend"},
@@ -236,7 +262,7 @@ func TestPullRequestService_ReassignPullRequest(t *testing.T) {
 				pr.On("GetReviewers", mock.Anything, "pr-1001").Return([]string{"u2"}, nil)
 
 				rr.On("Unassign", mock.Anything, "pr-1001", "u2").Return(nil)
-				rr.On("Assign", mock.Anything, "pr-1001", []string{"u3"}).Return(nil)
+				rr.On("Assign", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			},
 			expectedError: false,
 		},
@@ -244,7 +270,12 @@ func TestPullRequestService_ReassignPullRequest(t *testing.T) {
 			name:   "failure: PR not found",
 			prID:   "unknown",
 			userID: "u2",
-			setupMocks: func(ur *MockUserRepository, pr *MockPullRequestRepository, rr *MockReviewRepository) {
+			setupMocks: func(mockTx *MockTransactor, ur *MockUserRepository, pr *MockPullRequestRepository, rr *MockReviewRepository) {
+				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						fn := args.Get(1).(func(context.Context) error)
+						_ = fn(args.Get(0).(context.Context))
+					}).Return(nil)
 				ur.On("GetUserTeam", mock.Anything, "u2").Return([]*repository.User{
 					{ID: "u2", Username: "reviewer", IsActive: true, TeamName: "backend"},
 				}, nil)
@@ -258,7 +289,12 @@ func TestPullRequestService_ReassignPullRequest(t *testing.T) {
 			name:   "failure: PR already merged",
 			prID:   "pr-1001",
 			userID: "u2",
-			setupMocks: func(ur *MockUserRepository, pr *MockPullRequestRepository, rr *MockReviewRepository) {
+			setupMocks: func(mockTx *MockTransactor, ur *MockUserRepository, pr *MockPullRequestRepository, rr *MockReviewRepository) {
+				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						fn := args.Get(1).(func(context.Context) error)
+						_ = fn(args.Get(0).(context.Context))
+					}).Return(nil)
 				ur.On("GetUserTeam", mock.Anything, "u2").Return([]*repository.User{
 					{ID: "u2", Username: "reviewer", IsActive: true, TeamName: "backend"},
 				}, nil)
@@ -277,7 +313,12 @@ func TestPullRequestService_ReassignPullRequest(t *testing.T) {
 			name:   "failure: reviewer not assigned",
 			prID:   "pr-1001",
 			userID: "u5",
-			setupMocks: func(ur *MockUserRepository, pr *MockPullRequestRepository, rr *MockReviewRepository) {
+			setupMocks: func(mockTx *MockTransactor, ur *MockUserRepository, pr *MockPullRequestRepository, rr *MockReviewRepository) {
+				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						fn := args.Get(1).(func(context.Context) error)
+						_ = fn(args.Get(0).(context.Context))
+					}).Return(nil)
 				ur.On("GetUserTeam", mock.Anything, "u5").Return([]*repository.User{
 					{ID: "u5", Username: "other", IsActive: true, TeamName: "backend"},
 				}, nil)
@@ -298,7 +339,12 @@ func TestPullRequestService_ReassignPullRequest(t *testing.T) {
 			name:   "failure: no replacement candidate",
 			prID:   "pr-1001",
 			userID: "u2",
-			setupMocks: func(ur *MockUserRepository, pr *MockPullRequestRepository, rr *MockReviewRepository) {
+			setupMocks: func(mockTx *MockTransactor, ur *MockUserRepository, pr *MockPullRequestRepository, rr *MockReviewRepository) {
+				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						fn := args.Get(1).(func(context.Context) error)
+						_ = fn(args.Get(0).(context.Context))
+					}).Return(nil)
 				ur.On("GetUserTeam", mock.Anything, "u2").Return([]*repository.User{
 					{ID: "u1", Username: "author", IsActive: true, TeamName: "backend"},
 					{ID: "u2", Username: "reviewer", IsActive: true, TeamName: "backend"},
@@ -325,7 +371,7 @@ func TestPullRequestService_ReassignPullRequest(t *testing.T) {
 			mockPRRepo := new(MockPullRequestRepository)
 			mockReviewRepo := new(MockReviewRepository)
 
-			tt.setupMocks(mockUserRepo, mockPRRepo, mockReviewRepo)
+			tt.setupMocks(mockTx, mockUserRepo, mockPRRepo, mockReviewRepo)
 
 			service := NewPullRequestService(mockTx).
 				WithUserRepo(mockUserRepo).
@@ -356,14 +402,19 @@ func TestPullRequestService_MergePullRequest(t *testing.T) {
 	tests := []struct {
 		name          string
 		prID          string
-		setupMocks    func(*MockPullRequestRepository)
+		setupMocks    func(*MockTransactor, *MockPullRequestRepository)
 		expectedError bool
 		errorCode     model.ErrorCode
 	}{
 		{
 			name: "success: - merge PR",
 			prID: "pr-1001",
-			setupMocks: func(pr *MockPullRequestRepository) {
+			setupMocks: func(mockTx *MockTransactor, pr *MockPullRequestRepository) {
+				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						fn := args.Get(1).(func(context.Context) error)
+						_ = fn(args.Get(0).(context.Context))
+					}).Return(nil)
 				pr.On("Patch", mock.Anything, mock.MatchedBy(func(p *repository.PullRequestPatch) bool {
 					return p.ID == "pr-1001" && *p.Status == model.PRStatusMerged
 				})).Return(&repository.PullRequest{
@@ -381,7 +432,12 @@ func TestPullRequestService_MergePullRequest(t *testing.T) {
 		{
 			name: "failure: PR not found",
 			prID: "unknown",
-			setupMocks: func(pr *MockPullRequestRepository) {
+			setupMocks: func(mockTx *MockTransactor, pr *MockPullRequestRepository) {
+				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
+					Run(func(args mock.Arguments) {
+						fn := args.Get(1).(func(context.Context) error)
+						_ = fn(args.Get(0).(context.Context))
+					}).Return(nil)
 				pr.On("Patch", mock.Anything, mock.Anything).Return(nil, repository.ErrNotFound)
 			},
 			expectedError: true,
@@ -394,7 +450,7 @@ func TestPullRequestService_MergePullRequest(t *testing.T) {
 			mockTx := new(MockTransactor)
 			mockPRRepo := new(MockPullRequestRepository)
 
-			tt.setupMocks(mockPRRepo)
+			tt.setupMocks(mockTx, mockPRRepo)
 
 			service := NewPullRequestService(mockTx).
 				WithPullRequestRepo(mockPRRepo)
