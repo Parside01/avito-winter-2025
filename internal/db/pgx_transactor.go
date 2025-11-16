@@ -6,7 +6,9 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pkg/errors"
-	"time"
+	"github.com/yakoovad/avito-winter-2025/internal/model"
+	"github.com/yakoovad/avito-winter-2025/pkg/logger"
+	"go.uber.org/zap"
 )
 
 // Transactor allows you to run queries from repositories within a transaction
@@ -31,57 +33,64 @@ func (t *pgxTransactor) Ping(ctx context.Context) error {
 }
 
 func (t *pgxTransactor) WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) error {
-	var lastErr error
-
-	for attempt := 0; attempt <= t.maxRetries; attempt++ {
-		tx, err := t.pool.Begin(ctx)
+	l := logger.FromContext(ctx)
+	for i := 0; i <= t.maxRetries; i++ {
+		err := t.transaction(ctx, fn)
+		if err != nil && t.isDeadlockError(err) {
+			if i == t.maxRetries {
+				l.Error("maximum transaction retries reached due to deadlock", zap.Int("max_retries", t.maxRetries))
+				return err
+			}
+			l.Warn("deadlock detected, retrying transaction", zap.Int("attempt", i+1), zap.Int("max_retries", t.maxRetries))
+			continue
+		}
 		if err != nil {
-			return errors.Wrap(err, "failed to begin transaction")
+			return err
 		}
+	}
+	// Successful execution
+	return nil
+}
 
-		func() {
-			defer func() {
-				if tx.Conn() != nil && !tx.Conn().IsClosed() {
-					_ = tx.Rollback(ctx)
-				}
-			}()
-		}()
-
-		ctxWithTx := context.WithValue(ctx, TxContextKey{}, tx)
-
-		if err = fn(ctxWithTx); err != nil {
-			lastErr = errors.Wrap(err, "transaction function failed")
-
-			var pgErr *pgconn.PgError
-			if errors.As(err, &pgErr) && pgErr.Code == "40P01" {
-				if commitErr := tx.Rollback(ctx); commitErr != nil {
-					return errors.Wrap(commitErr, "failed to rollback after deadlock")
-				}
-
-				if attempt < t.maxRetries {
-					time.Sleep(time.Duration(attempt+1) * 100 * time.Millisecond)
-					continue
-				}
-			}
-
-			return lastErr
-		}
-
-		if err = tx.Commit(ctx); err != nil {
-			lastErr = errors.Wrap(err, "failed to commit transaction")
-
-			var pgErr *pgconn.PgError
-			if errors.As(err, &pgErr) && pgErr.Code == "40P01" && attempt < t.maxRetries {
-				time.Sleep(time.Duration(attempt+1) * 100 * time.Millisecond)
-				continue
-			}
-			return lastErr
-		}
-		return nil
+func (t *pgxTransactor) transaction(ctx context.Context, fn func(ctx context.Context) error) error {
+	tx, err := t.pool.Begin(ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to begin transaction")
 	}
 
-	return lastErr
+	defer func() {
+		if tx.Conn() != nil && !tx.Conn().IsClosed() {
+			_ = tx.Rollback(ctx)
+		}
+	}()
+
+	ctxWithTx := context.WithValue(ctx, TxContextKey{}, tx)
+
+	if err = fn(ctxWithTx); err != nil {
+		// The transaction will be rolled back in the deferred function
+		return errors.Wrap(err, "transaction function failed")
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		return errors.Wrap(err, "failed to commit transaction")
+	}
+
+	return nil
 }
+
+func (t *pgxTransactor) isDeadlockError(err error) bool {
+	var modelErr *model.Error
+	if errors.As(err, &modelErr) && modelErr.Cause != nil {
+		err = modelErr.Cause
+	}
+
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.SQLState() == "40P01"
+	}
+	return false
+}
+
 func GetPgxExecutorFromContext(ctx context.Context, pool *pgxpool.Pool) Executor {
 	if tx, ok := ctx.Value(TxContextKey{}).(pgx.Tx); ok {
 		return tx
