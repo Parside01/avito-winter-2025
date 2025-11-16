@@ -157,13 +157,6 @@ func runDeactivateMembersLoadTest(
 ) {
 	t.Helper()
 
-	if numWorkers <= 0 {
-		numWorkers = 10
-	}
-	if requestsPerWorker <= 0 {
-		requestsPerWorker = 100
-	}
-
 	var wg sync.WaitGroup
 	wg.Add(numWorkers)
 

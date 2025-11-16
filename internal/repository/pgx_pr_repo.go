@@ -63,7 +63,9 @@ func NewPgxPullRequestRepository(pool *pgxpool.Pool) PullRequestRepository {
 
 // GetReviewAssignments returns pull requests assigned to users (merged + open!)
 func (p *pgxPullRequestRepository) GetReviewAssignments(ctx context.Context, users []string) ([]*ReviewAssignment, error) {
-	// if len(users) == 0, this is a strange premature optimization
+	if len(users) == 0 {
+		return []*ReviewAssignment{}, nil
+	}
 	e := db.GetPgxExecutorFromContext(ctx, p.pool)
 
 	q := psql.Select(
@@ -73,20 +75,22 @@ func (p *pgxPullRequestRepository) GetReviewAssignments(ctx context.Context, use
 			psql.Quote("pr", "name"),
 			psql.Quote("pr", "status"),
 			psql.F("ARRAY_AGG", psql.Quote("r", "user_id")),
-			sm.From("review").As("r"),
-			sm.LeftJoin("pull_request").As("pr").On(psql.Quote("r", "pull_request_id").EQ(psql.Quote("pr", "id"))),
-			sm.Where(
-				psql.Quote("user_id").In(psql.Arg(users)).
-					And(psql.Quote("pull_request", "status"))),
-			sm.GroupBy([]any{
-				psql.Quote("pr", "id"),
-				psql.Quote("pr", "author_id"),
-				psql.Quote("pr", "name"),
-				psql.Quote("pr", "status"),
-			},
-			),
-			sm.ForShare("review")))
-
+		),
+		sm.From("review").As("r"),
+		sm.LeftJoin("pull_request").As("pr").
+			On(psql.Quote("r", "pull_request_id").
+				EQ(psql.Quote("pr", "id"))),
+		sm.Where(
+			psql.Quote("r", "user_id").In(psql.Arg(users)).
+				And(psql.Quote("pr", "status").EQ(psql.Arg("OPEN"))),
+		),
+		sm.GroupBy([]any{
+			psql.Quote("pr", "id"),
+			psql.Quote("pr", "author_id"),
+			psql.Quote("pr", "name"),
+			psql.Quote("pr", "status")}),
+		sm.ForShare("review"),
+	)
 	sql, args, err := q.Build(ctx)
 	if err != nil {
 		return nil, err
