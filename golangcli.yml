@@ -1,0 +1,244 @@
+version: "2"
+linters:
+  default: none
+  enable:
+    - arangolint
+    - asasalint
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - canonicalheader
+    - containedctx
+    - contextcheck
+    - copyloopvar
+    - cyclop
+    - decorder
+    - dogsled
+    - dupword
+    - durationcheck
+    - embeddedstructfieldcheck
+    - errcheck
+    - errchkjson
+    - errname
+    - errorlint
+    - exhaustive
+    - exptostd
+    - fatcontext
+    - forbidigo
+    - forcetypeassert
+    - funcorder
+    - ginkgolinter
+    - gocheckcompilerdirectives
+    - gochecknoinits
+    - gochecksumtype
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - godot
+    - godox
+    - goheader
+    - gomoddirectives
+    - gomodguard
+    - goprintffuncname
+    - gosec
+    - gosmopolitan
+    - govet
+    - grouper
+    - iface
+    - importas
+    - inamedparam
+    - ineffassign
+    - interfacebloat
+    - iotamixing
+    - loggercheck
+    - maintidx
+    - makezero
+    - mirror
+    - misspell
+    - modernize
+    - musttag
+    - nakedret
+    - nestif
+    - nilerr
+    - nilnesserr
+    - nilnil
+    - nlreturn
+    - noctx
+    - noinlineerr
+    - nolintlint
+    - nosprintfhostport
+    - paralleltest
+    - prealloc
+    - predeclared
+    - promlinter
+    - protogetter
+    - reassign
+    - recvcheck
+    - revive
+    - rowserrcheck
+    - sloglint
+    - spancheck
+    - sqlclosecheck
+    - staticcheck
+    - tagalign
+    - tagliatelle
+    - testableexamples
+    - testifylint
+    - thelper
+    - tparallel
+    - unconvert
+    - unparam
+    - unqueryvet
+    - unused
+    - usestdlibvars
+    - usetesting
+    - wastedassign
+    - whitespace
+    - wsl_v5
+    - zerologlint
+
+  settings:
+    cyclop:
+      max-complexity: 15
+    gocritic:
+      enable-all: true
+      disabled-checks:
+        - hugeParam
+        - rangeValCopy
+        - importShadow
+    nestif:
+      min-complexity: 7
+    nolintlint:
+      allow-unused: false
+      require-explanation: true
+      require-specific: true
+    reassign:
+      patterns:
+        - .*
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+        - shadow
+    prealloc:
+      for-loops: true
+    nilnil:
+      detect-opposite: true
+    revive:
+      enable-all-rules: true
+      rules:
+        - name: unexported-return
+          disabled: true
+        - name: line-length-limit
+          disabled: true
+        - name: add-constant
+          disabled: true
+        - name: unhandled-error
+          disabled: true
+        - name: comment-spacings
+          disabled: true
+        - name: var-naming
+          disabled: true
+        - name: nested-structs
+          disabled: true
+        - name: max-public-structs
+          disabled: true
+        - name: function-length
+          disabled: true
+        - name: import-shadowing
+          disabled: true
+        - name: import-alias-naming
+          disabled: true
+        - name: empty-block
+          disabled: true
+        - name: confusing-naming
+          disabled: true
+        - name: exported
+          disabled: true
+        - name: unused-receiver
+          disabled: true
+        - name: indent-error-flow
+          disabled: true
+        - name: early-return
+          disabled: true
+        - name: use-any
+          disabled: true
+        - name: argument-limit
+          disabled: true
+        - name: cognitive-complexity
+          disabled: true
+        - name: cyclomatic
+          arguments:
+            - 15
+        - name: confusing-naming
+          disabled: true
+        - name: deep-exit
+          disabled: true
+        - name: get-return
+          disabled: true
+        - name: package-directory-mismatch
+          disabled: true
+        - name: struct-tag
+          disabled: true
+    testifylint:
+      enable-all: true
+    usestdlibvars:
+      time-date-month: true
+      time-month: true
+      time-layout: true
+      crypto-hash: true
+      default-rpc-path: true
+      sql-isolation-level: true
+      tls-signature-scheme: true
+      constant-kind: true
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+
+    staticcheck:
+      checks:
+        - all
+        - -S1008
+        - -ST1003
+    tagliatelle:
+      case:
+        rules:
+          avro: snake
+          bson: snake
+          env: snake
+          envconfig: upperSnake
+          json: snake
+          mapstructure: snake
+          toml: snake
+          whatever: snake
+          xml: snake
+          yaml: snake
+
+    wsl_v5:
+      allow-first-in-block: false
+
+  exclusions:
+    presets:
+      - comments
+      - common-false-positives
+
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports
+    - swaggo
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+
+issues:
+  max-same-issues: 0
+
+run:
+  relative-path-mode: gomod

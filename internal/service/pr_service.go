@@ -456,7 +456,7 @@ func (p *PullRequestService) selectReplacementReviewer(authorID string, reviewer
 
 func (p *PullRequestService) selectReviewers(author string, candidates map[string]struct{}, max int) []string {
 	reviewers := make([]string, 0, max)
-	for candidate, _ := range candidates {
+	for candidate := range candidates {
 		if candidate == author {
 			continue
 		}

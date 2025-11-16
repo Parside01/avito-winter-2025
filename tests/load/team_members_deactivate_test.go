@@ -23,7 +23,7 @@ import (
 
 type metric struct {
 	Count int64
-	Total int64 // суммарная задержка в мс
+	Total int64
 }
 
 var httpMetrics = struct {
@@ -344,6 +344,7 @@ func doJSONRequest(t *testing.T, method, url, token string, body any) *http.Resp
 
 	if err != nil {
 		t.Errorf("request failed: %v", err)
+		recordMetricSuccess(url, false)
 		return nil
 	}
 
@@ -352,6 +353,7 @@ func doJSONRequest(t *testing.T, method, url, token string, body any) *http.Resp
 		_, _ = b.ReadFrom(resp.Body)
 		_ = resp.Body.Close()
 		t.Errorf("request to %s failed: %s, body: %s", url, resp.Status, b.String())
+		recordMetricSuccess(url, false)
 		return nil
 	}
 	recordMetricSuccess(url, resp.StatusCode < 400)

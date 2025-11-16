@@ -50,7 +50,10 @@ func (p *pgxReviewRepository) UnassignFromOpenPRs(ctx context.Context, userID st
 	if err != nil {
 		return err
 	}
-	tag.Delete()
+	// Strange if dont use this, objects dont delete
+	if tag.Delete() {
+		return nil
+	}
 	return nil
 }
 
