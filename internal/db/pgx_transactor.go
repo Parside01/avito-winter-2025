@@ -2,7 +2,9 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pkg/errors"
 )
@@ -30,29 +32,48 @@ func (t *pgxTransactor) Ping(ctx context.Context) error {
 func (t *pgxTransactor) WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) error {
 	const maxRetries = 3
 
-	tx, err := t.pool.Begin(ctx)
-	if err != nil {
-		return errors.Wrap(err, "failed to begin transaction")
-	}
-
-	defer func() {
-		if tx.Conn() != nil && !tx.Conn().IsClosed() {
-			_ = tx.Rollback(ctx)
+	for i := 0; i < maxRetries; i++ {
+		tx, err := t.pool.Begin(ctx)
+		if err != nil {
+			return errors.Wrap(err, "failed to begin transaction")
 		}
-	}()
 
-	ctxWithTx := context.WithValue(ctx, TxContextKey{}, tx)
+		func() {
+			defer func() {
+				if tx.Conn() != nil && !tx.Conn().IsClosed() {
+					_ = tx.Rollback(ctx)
+				}
+			}()
 
-	if err = fn(ctxWithTx); err != nil {
-		// The transaction will be rolled back in the deferred function
-		return errors.Wrap(err, "transaction function failed")
+			ctxWithTx := context.WithValue(ctx, TxContextKey{}, tx)
+
+			if err = fn(ctxWithTx); err != nil {
+				err = errors.Wrap(err, "transaction function failed")
+				return
+			}
+
+			if err = tx.Commit(ctx); err != nil {
+				err = errors.Wrap(err, "failed to commit transaction")
+				return
+			}
+		}()
+
+		if err == nil {
+			return nil
+		}
+
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "40P01" {
+			// Deadlock detected -> retry
+			if i < maxRetries-1 {
+				continue
+			}
+			return errors.Wrap(err, fmt.Sprintf("transaction failed after %d retries due to deadlock", maxRetries))
+		}
+
+		return err
 	}
-
-	if err = tx.Commit(ctx); err != nil {
-		return errors.Wrap(err, "failed to commit transaction")
-	}
-
-	return nil
+	return fmt.Errorf("transaction failed after %d retries", maxRetries)
 }
 
 func GetPgxExecutorFromContext(ctx context.Context, pool *pgxpool.Pool) Executor {
