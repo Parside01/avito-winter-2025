@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -67,12 +66,15 @@ func (p *pgxPullRequestRepository) GetReviewAssignments(ctx context.Context, use
 		return []*ReviewAssignment{}, nil
 	}
 	e := db.GetPgxExecutorFromContext(ctx, p.pool)
+	inArgs := make([]any, 0, len(users)+1)
+	for _, u := range users {
+		inArgs = append(inArgs, u)
+	}
 
 	q := psql.Select(
 		sm.Columns(
 			psql.Quote("pr", "id"),
 			psql.Quote("pr", "author_id"),
-			psql.Quote("pr", "name"),
 			psql.Quote("pr", "status"),
 			psql.F("ARRAY_AGG", psql.Quote("r", "user_id")),
 		),
@@ -81,7 +83,7 @@ func (p *pgxPullRequestRepository) GetReviewAssignments(ctx context.Context, use
 			On(psql.Quote("r", "pull_request_id").
 				EQ(psql.Quote("pr", "id"))),
 		sm.Where(
-			psql.Quote("r", "user_id").In(psql.ArgGroup(users)).
+			psql.Quote("r", "user_id").In(psql.Arg(inArgs...)).
 				And(psql.Quote("pr", "status").EQ(psql.Arg("OPEN"))),
 		),
 		sm.GroupBy(
@@ -94,8 +96,6 @@ func (p *pgxPullRequestRepository) GetReviewAssignments(ctx context.Context, use
 	if err != nil {
 		return nil, err
 	}
-
-	fmt.Println(sql)
 
 	rows, err := e.Query(ctx, sql, args...)
 	if err != nil {

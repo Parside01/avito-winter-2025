@@ -46,8 +46,14 @@ func (p *pgxReviewRepository) UnassignFromOpenPRs(ctx context.Context, userID st
 		return err
 	}
 
-	_, err = e.Exec(ctx, sql, args...)
-	return err
+	tag, err := e.Exec(ctx, sql, args...)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (p *pgxReviewRepository) Assign(ctx context.Context, prID string, reviewerIDs []string) error {
