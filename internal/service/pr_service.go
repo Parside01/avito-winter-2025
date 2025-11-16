@@ -9,6 +9,7 @@ import (
 	"github.com/yakoovad/avito-winter-2025/pkg/logger"
 	"go.uber.org/zap"
 	"slices"
+	"sort"
 )
 
 type PullRequestService struct {
@@ -33,6 +34,9 @@ func (p *PullRequestService) DeactivateTeamMembers(ctx context.Context, team str
 		zap.String("team_name", team),
 		zap.Strings("user_ids", users),
 	)
+
+	// Sort users to have deterministic processing order
+	sort.Strings(users)
 
 	err := p.tx.WithinTransaction(ctx, func(txCtx context.Context) error {
 		membersRepo, err := p.teams.GetTeamMembers(txCtx, team)

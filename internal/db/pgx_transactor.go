@@ -28,6 +28,8 @@ func (t *pgxTransactor) Ping(ctx context.Context) error {
 }
 
 func (t *pgxTransactor) WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) error {
+	const maxRetries = 3
+
 	tx, err := t.pool.Begin(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to begin transaction")
