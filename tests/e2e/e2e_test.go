@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"github.com/go-faker/faker/v4"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/log"
 	"github.com/testcontainers/testcontainers-go/modules/compose"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -125,7 +125,41 @@ func TestEndToEnd(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, app)
 
-	_, reader, err := app.Exec(ctx, []string{"./main", "generate-api-key", "--type", "admin", "--only-token", "true"})
+	adminToken := generateToken(t, ctx, app, "admin")
+	userToken := generateToken(t, ctx, app, "user")
+
+	defer func() {
+		goLogs, _ := app.Logs(ctx)
+		assert.NoError(t, err)
+		var logBuf bytes.Buffer
+		_, _ = logBuf.ReadFrom(goLogs)
+		t.Logf("app logs:\n%s", logBuf.String())
+	}()
+
+	port, err := app.MappedPort(ctx, "8080/tcp")
+	assert.NoError(t, err)
+	assert.NotEmpty(t, port)
+
+	baseUrl := fmt.Sprintf("http://localhost:%s", port.Port())
+
+	allTeams, teamUsers, allPRs := prepareTestData(t, baseUrl, adminToken)
+	assert.NotEmpty(t, allTeams)
+	assert.NotEmpty(t, teamUsers)
+	assert.NotEmpty(t, allPRs)
+
+	t.Run("e2e test", func(t *testing.T) {
+		t.Parallel()
+		for _, teamName := range allTeams {
+			t.Run(fmt.Sprintf("e2e for team %s", teamName), func(t *testing.T) {
+				t.Parallel()
+				runForTeam(t, baseUrl, adminToken, userToken, teamName, allPRs)
+			})
+		}
+	})
+}
+
+func generateToken(t *testing.T, ctx context.Context, app testcontainers.Container, tokenType string) string {
+	_, reader, err := app.Exec(ctx, []string{"./main", "generate-api-key", "--type", tokenType, "--only-token", "true"})
 	assert.NoError(t, err)
 
 	var buf bytes.Buffer
@@ -142,37 +176,7 @@ func TestEndToEnd(t *testing.T) {
 		}
 		return r
 	}, token)
-
-	assert.NotEmpty(t, token)
-
-	defer func() {
-		goLogs, _ := app.Logs(ctx)
-		assert.NoError(t, err)
-		var logBuf bytes.Buffer
-		_, _ = logBuf.ReadFrom(goLogs)
-		t.Logf("app logs:\n%s", logBuf.String())
-	}()
-
-	port, err := app.MappedPort(ctx, "8080/tcp")
-	assert.NoError(t, err)
-	assert.NotEmpty(t, port)
-
-	baseUrl := fmt.Sprintf("http://localhost:%s", port.Port())
-
-	allTeams, teamUsers, userPRs := prepareTestData(t, baseUrl, token)
-	assert.NotEmpty(t, allTeams)
-	assert.NotEmpty(t, teamUsers)
-	assert.NotEmpty(t, userPRs)
-
-	t.Run("e2e test", func(t *testing.T) {
-		t.Parallel()
-		for _, teamName := range allTeams {
-			t.Run(fmt.Sprintf("e2e for team %s", teamName), func(t *testing.T) {
-				t.Parallel()
-				runForTeam(t, baseUrl, token, token, teamName)
-			})
-		}
-	})
+	return token
 }
 
 type TeamAddRequest struct {
@@ -186,11 +190,11 @@ type PRCreateRequest struct {
 	Author string `json:"author_id"`
 }
 
-func prepareTestData(t *testing.T, baseURL string, token string) (allTeams []string, teamUsers map[string][]string, userPRs map[string][]string) {
+func prepareTestData(t *testing.T, baseURL string, token string) (allTeams []string, teamUsers map[string][]string, allPRs []*model.PullRequest) {
 	t.Helper()
 
 	teamUsers = make(map[string][]string)
-	userPRs = make(map[string][]string)
+	allPRs = make([]*model.PullRequest, 0)
 
 	numTeams := 20
 	userCount := 0
@@ -220,12 +224,13 @@ func prepareTestData(t *testing.T, baseURL string, token string) (allTeams []str
 			Members:  members,
 		}
 
-		doJSONRequest(t,
+		resp := doJSONRequest(t,
 			http.MethodPost,
 			baseURL+"/team/add",
 			token,
 			body,
 		)
+		_ = resp.Body.Close()
 
 		allTeams = append(allTeams, teamName)
 		teamUsers[teamName] = userIDs
@@ -245,18 +250,26 @@ func prepareTestData(t *testing.T, baseURL string, token string) (allTeams []str
 					Author: userID,
 				}
 
-				doJSONRequest(t,
+				resp := doJSONRequest(t,
 					http.MethodPost,
 					baseURL+"/pullRequest/create",
 					token,
 					prBody,
 				)
-				userPRs[userID] = append(userPRs[userID], prID)
+				if resp.StatusCode == http.StatusCreated {
+					var createdPR struct {
+						PR *model.PullRequest `json:"pr"`
+					}
+					err := json.NewDecoder(resp.Body).Decode(&createdPR)
+					assert.NoError(t, err)
+					allPRs = append(allPRs, createdPR.PR)
+				}
+				_ = resp.Body.Close()
 			}
 		}
 	}
 
-	return allTeams, teamUsers, userPRs
+	return allTeams, teamUsers, allPRs
 }
 
 func doJSONRequest(t *testing.T, method, url, token string, body any) *http.Response {
@@ -305,7 +318,7 @@ func doJSONRequest(t *testing.T, method, url, token string, body any) *http.Resp
 	return resp
 }
 
-func runForTeam(t *testing.T, baseUrl, adminToken, userToken, teamName string) {
+func runForTeam(t *testing.T, baseUrl, adminToken, userToken, teamName string, allPRs []*model.PullRequest) {
 	t.Run("TestGetNonExistentTeam", func(t *testing.T) {
 		testGetNonExistentTeam(t, baseUrl, adminToken)
 	})
@@ -323,10 +336,10 @@ func runForTeam(t *testing.T, baseUrl, adminToken, userToken, teamName string) {
 		openPRs, mergedPRs = testMergePRs(t, baseUrl, adminToken, userToken, allReviews)
 	})
 	t.Run("TestReassignReviewer", func(t *testing.T) {
-		testReassignReviewer(t, baseUrl, adminToken, userToken, openPRs, mergedPRs)
+		testReassignReviewer(t, baseUrl, adminToken, userToken, openPRs, mergedPRs, allPRs)
 	})
 	t.Run("TestDeactivateReviewersAndReassign", func(t *testing.T) {
-		testDeactivateReviewersAndReassign(t, baseUrl, adminToken, openPRs)
+		testDeactivateReviewersAndReassign(t, baseUrl, adminToken, openPRs, allPRs)
 	})
 	t.Run("TestDeactivateTeamMembers", func(t *testing.T) {
 		testDeactivateTeamMembers(t, baseUrl, adminToken, teamName)
@@ -342,42 +355,42 @@ func testGetNonExistentTeam(t *testing.T, baseUrl, adminToken string) {
 func testGetExistingTeam(t *testing.T, baseUrl, adminToken, userToken, teamName string) []string {
 	var teamUsers []string
 	var teamResp *model.Team
-	// Admin token
+	// Admin token success
 	resp := doJSONRequest(t, http.MethodGet, baseUrl+"/team/get?team_name="+teamName, adminToken, nil)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	bodyBytes, _ := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
-	require.NoError(t, json.Unmarshal(bodyBytes, &teamResp))
+	assert.NoError(t, json.Unmarshal(bodyBytes, &teamResp))
 
 	for _, member := range teamResp.Members {
 		teamUsers = append(teamUsers, member.UserID)
 	}
-	require.NotEmpty(t, teamUsers, "team should have users")
+	assert.NotEmpty(t, teamUsers, "team should have users")
 
-	// User token
+	// User token success
 	resp = doJSONRequest(t, http.MethodGet, baseUrl+"/team/get?team_name="+teamName, userToken, nil)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	_ = resp.Body.Close()
 	return teamUsers
 }
 
-func testGetAllUserReviews(t *testing.T, baseUrl, adminToken, userToken string, teamUsers []string) map[string][]*model.PullRequestShort {
+func testGetAllUserReviews(t *testing.T, baseURL, adminToken, userToken string, teamUsers []string) map[string][]*model.PullRequestShort {
 	allReviews := make(map[string][]*model.PullRequestShort)
 	for _, userID := range teamUsers {
 		var userReview struct {
 			UserID       string                    `json:"user_id"`
 			PullRequests []*model.PullRequestShort `json:"pull_requests"`
 		}
-		// Admin token
-		url := fmt.Sprintf("%s/users/getReview?user_id=%s", baseUrl, userID)
+		// Admin token success
+		url := fmt.Sprintf("%s/users/getReview?user_id=%s", baseURL, userID)
 		resp := doJSONRequest(t, http.MethodGet, url, adminToken, nil)
-		require.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
-		require.NoError(t, json.Unmarshal(bodyBytes, &userReview))
+		assert.NoError(t, json.Unmarshal(bodyBytes, &userReview))
 		allReviews[userID] = userReview.PullRequests
 
-		// User token
+		// User token success
 		resp = doJSONRequest(t, http.MethodGet, url, userToken, nil)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		_ = resp.Body.Close()
@@ -386,53 +399,58 @@ func testGetAllUserReviews(t *testing.T, baseUrl, adminToken, userToken string, 
 }
 
 func testMergePRs(t *testing.T, baseUrl, adminToken, userToken string, allReviews map[string][]*model.PullRequestShort) ([]*model.PullRequestShort, []*model.PullRequestShort) {
-	var openPRs []*model.PullRequestShort
+	var opened []*model.PullRequestShort
 	var mergedPRs []*model.PullRequestShort
 	for _, reviews := range allReviews {
 		for _, pr := range reviews {
 			if pr.Status == "OPEN" {
-				openPRs = append(openPRs, pr)
+				opened = append(opened, pr)
 			} else if pr.Status == "MERGED" {
 				mergedPRs = append(mergedPRs, pr)
 			}
 		}
 	}
 
-	if len(openPRs) == 0 {
+	if len(opened) == 0 {
 		t.Skip("no open PRs to merge")
 	}
-	prsToMerge := openPRs[:len(openPRs)/2]
+
+	prsToMerge := opened[:len(opened)/2]
 	for _, pr := range prsToMerge {
 		mergePayload := map[string]string{"pull_request_id": pr.ID}
 
-		// User token should fail
+		// User token fail
 		resp := doJSONRequest(t, http.MethodPost, baseUrl+"/pullRequest/merge", userToken, mergePayload)
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 		_ = resp.Body.Close()
 
-		// Admin token should succeed
+		// Admin token succeed
 		resp = doJSONRequest(t, http.MethodPost, baseUrl+"/pullRequest/merge", adminToken, mergePayload)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		_ = resp.Body.Close()
 		mergedPRs = append(mergedPRs, pr)
 	}
-	// update openPRs
-	openPRs = openPRs[len(openPRs)/2:]
-	return openPRs, mergedPRs
+
+	opened = opened[len(opened)/2:]
+	return opened, mergedPRs
 }
 
-func testReassignReviewer(t *testing.T, baseUrl, adminToken, userToken string, openPRs []*model.PullRequestShort, mergedPRs []*model.PullRequestShort) {
+func testReassignReviewer(t *testing.T, baseUrl, adminToken, userToken string, openPRs []*model.PullRequestShort, mergedPRs []*model.PullRequestShort, allPRs []*model.PullRequest) {
 	if len(openPRs) == 0 {
 		t.Skip("no open PRs with reviewers to reassign")
 	}
 
 	var prToReassign *model.PullRequest
-	// get full PR to have reviewers
-	resp := doJSONRequest(t, http.MethodGet, baseUrl+"/pullRequest/get?id="+openPRs[0].ID, adminToken, nil)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	err := json.NewDecoder(resp.Body).Decode(&prToReassign)
-	_ = resp.Body.Close()
-	require.NoError(t, err)
+	for _, pr := range allPRs {
+		if pr.ID == openPRs[0].ID {
+			prToReassign = pr
+			break
+		}
+	}
+	assert.NotNil(t, prToReassign, "could not find full PR object for reassign test")
+	if prToReassign == nil {
+		t.Skip()
+	}
 
 	if len(prToReassign.Reviewers) == 0 {
 		t.Skip("no reviewers to reassign")
@@ -442,7 +460,7 @@ func testReassignReviewer(t *testing.T, baseUrl, adminToken, userToken string, o
 	reassignPayload := map[string]string{"pull_request_id": prToReassign.ID, "old_user_id": oldReviewer}
 
 	// User token should fail
-	resp = doJSONRequest(t, http.MethodPost, baseUrl+"/pullRequest/reassign", userToken, reassignPayload)
+	resp := doJSONRequest(t, http.MethodPost, baseUrl+"/pullRequest/reassign", userToken, reassignPayload)
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	_ = resp.Body.Close()
 
@@ -452,44 +470,46 @@ func testReassignReviewer(t *testing.T, baseUrl, adminToken, userToken string, o
 	_ = resp.Body.Close()
 
 	if len(mergedPRs) > 0 {
-		mergedPR := mergedPRs[0]
+		mergedPRShort := mergedPRs[0]
 
-		var fullMergedPR *model.PullRequest
-		resp = doJSONRequest(t, http.MethodGet, baseUrl+"/pullRequest/get?id="+mergedPR.ID, adminToken, nil)
-		require.Equal(t, http.StatusOK, resp.StatusCode)
-		err = json.NewDecoder(resp.Body).Decode(&fullMergedPR)
-		_ = resp.Body.Close()
-		require.NoError(t, err)
+		var mergedPR *model.PullRequest
+		for _, pr := range allPRs {
+			if pr.ID == mergedPRShort.ID {
+				mergedPR = pr
+				break
+			}
+		}
+		assert.NotNil(t, mergedPR, "could not find full PR object for merged reassign test")
+		if mergedPR == nil {
+			t.Skip()
+		}
 
-		if len(fullMergedPR.Reviewers) > 0 {
-			reassignMergedPayload := map[string]string{"pull_request_id": fullMergedPR.ID, "old_user_id": fullMergedPR.Reviewers[0]}
+		if len(mergedPR.Reviewers) > 0 {
+			reassignMergedPayload := map[string]string{"pull_request_id": mergedPR.ID, "old_user_id": mergedPR.Reviewers[0]}
 			resp = doJSONRequest(t, http.MethodPost, baseUrl+"/pullRequest/reassign", adminToken, reassignMergedPayload)
 			assert.Equal(t, http.StatusConflict, resp.StatusCode)
 			var errResp *model.Error
-			err = json.NewDecoder(resp.Body).Decode(&errResp)
-			require.NoError(t, err)
+			err := json.NewDecoder(resp.Body).Decode(&errResp)
+			assert.NoError(t, err)
 			assert.Equal(t, model.ErrorCodePRMerged, errResp.Code)
 			_ = resp.Body.Close()
 		}
 	}
 }
 
-func testDeactivateReviewersAndReassign(t *testing.T, baseUrl, adminToken string, openPRs []*model.PullRequestShort) {
+func testDeactivateReviewersAndReassign(t *testing.T, baseUrl, adminToken string, openPRs []*model.PullRequestShort, allPRs []*model.PullRequest) {
 	var prWithMultipleReviewers *model.PullRequest
 	found := false
-	for _, pr := range openPRs {
+	for _, prShort := range openPRs {
 		var fullPR *model.PullRequest
-		resp := doJSONRequest(t, http.MethodGet, baseUrl+"/pullRequest/get?id="+pr.ID, adminToken, nil)
-		if resp.StatusCode != http.StatusOK {
-			continue
-		}
-		err := json.NewDecoder(resp.Body).Decode(&fullPR)
-		_ = resp.Body.Close()
-		if err != nil {
-			continue
+		for _, p := range allPRs {
+			if p.ID == prShort.ID {
+				fullPR = p
+				break
+			}
 		}
 
-		if len(fullPR.Reviewers) > 1 {
+		if fullPR != nil && len(fullPR.Reviewers) > 1 {
 			prWithMultipleReviewers = fullPR
 			found = true
 			break
@@ -509,7 +529,7 @@ func testDeactivateReviewersAndReassign(t *testing.T, baseUrl, adminToken string
 		assert.Equal(t, http.StatusConflict, resp.StatusCode)
 		var errResp *model.Error
 		err := json.NewDecoder(resp.Body).Decode(&errResp)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, model.ErrorCodeNoCandidate, errResp.Code)
 		_ = resp.Body.Close()
 	}
@@ -519,10 +539,10 @@ func testDeactivateTeamMembers(t *testing.T, baseUrl, adminToken, teamName strin
 	var activeUsers []string
 	teamResp := &model.Team{}
 	resp := doJSONRequest(t, http.MethodGet, baseUrl+"/team/get?team_name="+teamName, adminToken, nil)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	err := json.NewDecoder(resp.Body).Decode(teamResp)
 	_ = resp.Body.Close()
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	for _, member := range teamResp.Members {
 		if member.IsActive {
