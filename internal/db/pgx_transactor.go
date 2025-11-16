@@ -47,6 +47,7 @@ func (t *pgxTransactor) WithinTransaction(ctx context.Context, fn func(ctx conte
 		if err != nil {
 			return err
 		}
+		break
 	}
 	// Successful execution
 	return nil
