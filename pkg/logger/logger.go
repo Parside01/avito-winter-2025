@@ -5,6 +5,5 @@ import (
 )
 
 func NewLogger() (*zap.Logger, error) {
-	// Use production logger by default — structured, performant.
-	return zap.NewProduction()
+	return zap.NewProduction(zap.IncreaseLevel(zap.WarnLevel))
 }
