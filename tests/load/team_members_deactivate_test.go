@@ -32,6 +32,12 @@ var httpMetrics = struct {
 	data: make(map[string]*metric),
 }
 
+var sliSuccess = struct {
+	data map[string]*metric
+}{
+	data: make(map[string]*metric),
+}
+
 func recordMetric(endpoint string, durationMs int64) {
 	m, ok := httpMetrics.data[endpoint]
 	if !ok {
@@ -42,6 +48,17 @@ func recordMetric(endpoint string, durationMs int64) {
 	m.Total += durationMs
 }
 
+func recordMetricSuccess(endpoint string, success bool) {
+	m, ok := sliSuccess.data[endpoint]
+	if !ok {
+		m = &metric{}
+		sliSuccess.data[endpoint] = m
+	}
+	if success {
+		m.Count++
+	}
+	m.Total++
+}
 func printMetrics(t *testing.T) {
 	t.Log("--- http metrics (avg ms) ---")
 	for ep, m := range httpMetrics.data {
@@ -50,6 +67,15 @@ func printMetrics(t *testing.T) {
 		}
 		avg := float64(m.Total) / float64(m.Count)
 		t.Logf("endpoint=%s count=%d avg=%.1fms", ep, m.Count, avg)
+	}
+
+	t.Log("--- SLI Success Rate ---")
+	for ep, m := range sliSuccess.data {
+		if m.Total == 0 {
+			continue
+		}
+		successRate := (float64(m.Count) / float64(m.Total)) * 100.0
+		t.Logf("endpoint=%s success=%d total=%d success_rate=%.2f%%", ep, m.Count, m.Total, successRate)
 	}
 }
 
@@ -317,15 +343,18 @@ func doJSONRequest(t *testing.T, method, url, token string, body any) *http.Resp
 	recordMetric(url, elapsed)
 
 	if err != nil {
-		t.Fatalf("request failed: %v", err)
+		t.Errorf("request failed: %v", err)
+		return nil
 	}
 
 	if resp.StatusCode >= 400 {
 		var b bytes.Buffer
 		_, _ = b.ReadFrom(resp.Body)
 		_ = resp.Body.Close()
-		t.Fatalf("request to %s failed: %s, body: %s", url, resp.Status, b.String())
+		t.Errorf("request to %s failed: %s, body: %s", url, resp.Status, b.String())
+		return nil
 	}
+	recordMetricSuccess(url, resp.StatusCode >= 400)
 	t.Logf("Success %s request to %s, time: %d ms", method, url, time.Since(start).Milliseconds())
 	return resp
 }
