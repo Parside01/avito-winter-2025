@@ -56,7 +56,7 @@ func (p *pgxUserRepository) GetUserTeam(ctx context.Context, userID string) ([]*
 				sm.Where(psql.Quote("id").EQ(psql.Arg(userID))),
 			),
 		)),
-		sm.ForShare("users"),
+		sm.ForShare("users").SkipLocked(),
 	)
 
 	query, args, err := q.Build(ctx)

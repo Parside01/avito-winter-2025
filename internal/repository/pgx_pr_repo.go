@@ -125,7 +125,7 @@ func (p *pgxPullRequestRepository) GetReviewedPRs(ctx context.Context, userID st
 		sm.Where(
 			psql.Quote("user_id").EQ(psql.Arg(userID)),
 		),
-		sm.ForShare("review"),
+		sm.ForShare("review").SkipLocked(),
 	)
 
 	sql, args, err := q.Build(ctx)
@@ -160,7 +160,7 @@ func (p *pgxPullRequestRepository) GetReviewers(ctx context.Context, prID string
 		sm.Columns("user_id"),
 		sm.From("review"),
 		sm.Where(psql.Quote("pull_request_id").EQ(psql.Arg(prID))),
-		sm.ForShare("review"),
+		sm.ForShare("review").SkipLocked(),
 	)
 
 	sql, args, err := q.Build(ctx)
@@ -194,7 +194,7 @@ func (p *pgxPullRequestRepository) Get(ctx context.Context, prID string) (*PullR
 		sm.Columns("id", "name", "author_id", "status", "need_more_reviewers", "created_at", "merged_at"),
 		sm.From("pull_request"),
 		sm.Where(psql.Quote("id").EQ(psql.Arg(prID))),
-		sm.ForShare("pull_request"),
+		sm.ForShare("pull_request").SkipLocked(),
 	)
 
 	sql, args, err := q.Build(ctx)
