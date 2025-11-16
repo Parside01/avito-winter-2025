@@ -81,7 +81,7 @@ func (p *pgxPullRequestRepository) GetReviewAssignments(ctx context.Context, use
 			On(psql.Quote("r", "pull_request_id").
 				EQ(psql.Quote("pr", "id"))),
 		sm.Where(
-			psql.Quote("r", "user_id").In(psql.Arg(users)).
+			psql.Quote("r", "user_id").In(psql.ArgGroup(users)).
 				And(psql.Quote("pr", "status").EQ(psql.Arg("OPEN"))),
 		),
 		sm.GroupBy(
