@@ -84,11 +84,11 @@ func (p *pgxPullRequestRepository) GetReviewAssignments(ctx context.Context, use
 			psql.Quote("r", "user_id").In(psql.Arg(users)).
 				And(psql.Quote("pr", "status").EQ(psql.Arg("OPEN"))),
 		),
-		sm.GroupBy([]any{
-			psql.Quote("pr", "id"),
-			psql.Quote("pr", "author_id"),
-			psql.Quote("pr", "name"),
-			psql.Quote("pr", "status")}),
+		sm.GroupBy(
+			psql.Quote("pr", "id")),
+		//psql.Quote("pr", "author_id"),
+		//psql.Quote("pr", "name"),
+		//psql.Quote("pr", "status")),
 		sm.ForShare("review"),
 	)
 	sql, args, err := q.Build(ctx)
