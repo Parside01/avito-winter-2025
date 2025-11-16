@@ -97,13 +97,6 @@ func TestEndToEnd(t *testing.T) {
 		compose.StackIdentifier("load_test_team_deactivate"),
 	)
 
-	err = stack.Down(
-		context.Background(),
-		compose.RemoveOrphans(true),
-		compose.RemoveVolumes(true),
-		compose.RemoveImagesLocal,
-	)
-
 	if err != nil {
 		t.Fatalf("failed to create compose stack: %v", err)
 	}
@@ -407,9 +400,10 @@ func testMergePRs(t *testing.T, baseUrl, adminToken, userToken string, allReview
 	var merged []*model.PullRequestShort
 	for _, reviews := range allReviews {
 		for _, pr := range reviews {
-			if pr.Status == "OPEN" {
+			switch pr.Status {
+			case model.PRStatusOpen:
 				opened = append(opened, pr)
-			} else if pr.Status == "MERGED" {
+			case model.PRStatusMerged:
 				merged = append(merged, pr)
 			}
 		}
