@@ -7,13 +7,15 @@ import (
 	"net/http"
 )
 
+type SetUserIsActiveRequest struct {
+	UserID   string `json:"user_id" validate:"required"`
+	IsActive bool   `json:"is_active"`
+}
+
 func (h *Handler) SetUserIsActive(e echo.Context) error {
 	l := logger.FromContext(e.Request().Context())
 
-	var req struct {
-		UserID   string `json:"user_id" validate:"required"`
-		IsActive bool   `json:"is_active"`
-	}
+	req := SetUserIsActiveRequest{}
 
 	if err := h.decodeRequest(e, &req); err != nil {
 		l.Error("invalid request", zap.Any("error", err))

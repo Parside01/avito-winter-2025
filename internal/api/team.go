@@ -8,13 +8,15 @@ import (
 	"net/http"
 )
 
+type DeactivateTeamMembersRequest struct {
+	TeamName string   `json:"team_name" validate:"required"`
+	Users    []string `json:"users" validate:"required,min=1"`
+}
+
 func (h *Handler) DeactivateTeamMembers(e echo.Context) error {
 	l := logger.FromContext(e.Request().Context())
 
-	var req struct {
-		TeamName string   `json:"team_name" validate:"required"`
-		Users    []string `json:"users" validate:"required,min=1"`
-	}
+	req := DeactivateTeamMembersRequest{}
 
 	if err := h.decodeRequest(e, &req); err != nil {
 		l.Error("invalid request", zap.Any("error", err))

@@ -8,13 +8,25 @@ import (
 	"net/http"
 )
 
+type ReassignPullRequestRequest struct {
+	ID     string `json:"pull_request_id" validate:"required"`
+	UserID string `json:"old_user_id" validate:"required"`
+}
+
+type MergePullRequestRequest struct {
+	ID string `json:"pull_request_id" validate:"required"`
+}
+
+type CreatePullRequestRequest struct {
+	ID       string `json:"pull_request_id" validate:"required"`
+	Name     string `json:"pull_request_name" validate:"required"`
+	AuthorID string `json:"author_id" validate:"required"`
+}
+
 func (h *Handler) ReassignPullRequest(e echo.Context) error {
 	l := logger.FromContext(e.Request().Context())
 
-	var req struct {
-		ID     string `json:"pull_request_id" validate:"required"`
-		UserID string `json:"old_user_id" validate:"required"`
-	}
+	req := ReassignPullRequestRequest{}
 
 	if err := h.decodeRequest(e, &req); err != nil {
 		l.Error("invalid request", zap.Any("error", err))
@@ -40,9 +52,7 @@ func (h *Handler) ReassignPullRequest(e echo.Context) error {
 func (h *Handler) MergePullRequest(e echo.Context) error {
 	l := logger.FromContext(e.Request().Context())
 
-	var req struct {
-		ID string `json:"pull_request_id" validate:"required"`
-	}
+	req := MergePullRequestRequest{}
 
 	if err := h.decodeRequest(e, &req); err != nil {
 		l.Error("invalid request", zap.Any("error", err))
@@ -63,11 +73,7 @@ func (h *Handler) MergePullRequest(e echo.Context) error {
 func (h *Handler) CreatePullRequest(e echo.Context) error {
 	l := logger.FromContext(e.Request().Context())
 
-	var req struct {
-		ID       string `json:"pull_request_id" validate:"required"`
-		Name     string `json:"pull_request_name" validate:"required"`
-		AuthorID string `json:"author_id" validate:"required"`
-	}
+	req := CreatePullRequestRequest{}
 
 	if err := h.decodeRequest(e, &req); err != nil {
 		l.Error("invalid request", zap.Any("error", err))
