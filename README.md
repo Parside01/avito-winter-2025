@@ -6,6 +6,45 @@
 docker compose up --build
 ```
 
+## Авторизация
+Для теста основных эндпоинтов, нужны токены, которые можно ставить
+header: X-Api-Key
+cookie: X-Api-Key
+header: Authorization:Bearer - самый правильный вариант
+
+Генерация токенов:
+1. Плохой метод
+```bash
+/token/generate - небезопасный метод получения токенов, не для прода точно!!
+type GenerateTokenRequest struct {
+	Type     auth.TokenType `json:"type" validate:"required,oneof=user admin"`
+	Duration time.Duration  `json:"duration" validate:"required,gt=0"`
+}
+```
+2. Рекомендую 
+```bash
+go run ./cmd generate-api-key
+
+go run ./cmd generate-api-key --help
+Generate a new API key token and optional token-type (admin, user), default: user
+
+Usage:
+  app generate-api-key [flags]
+
+Flags:
+  -h, --help           help for generate-api-key
+  -o, --only-token     output only the token
+  -t, --ttl duration   token time to live (default 336h0m0s)
+  -y, --type string    token type (user, admin) (default "user")
+```
+---
+
+### Тесты
+
+```bash
+go test ./internal/...
+```
+
 ### Тесты
 
 ```bash

@@ -55,7 +55,7 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	e.Use(middleware.CORS())
 
 	e.GET("/health", h.healthChecker.HealthCheck())
-	//e.POST("/token/generate", h.GenerateToken)
+	e.POST("/token/generate", h.GenerateToken)
 
 	e.POST("/users/setIsActive", h.SetUserIsActive, AuthMiddleware(auth.TokenTypeAdmin))
 	e.GET("/users/getReview", h.GetUserReview, AuthMiddleware(auth.TokenTypeUser, auth.TokenTypeAdmin))
