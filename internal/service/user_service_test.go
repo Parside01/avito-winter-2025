@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/yakoovad/avito-winter-2025/internal/model"
 	"github.com/yakoovad/avito-winter-2025/internal/repository"
+	"github.com/yakoovad/avito-winter-2025/mocks"
 	"testing"
 )
 
@@ -15,7 +16,7 @@ func TestUserService_SetUserIsActive(t *testing.T) {
 		name          string
 		userID        string
 		isActive      bool
-		setupMocks    func(*MockTransactor, *MockUserRepository, *MockReviewRepository)
+		setupMocks    func(*mocks.MockTransactor, *mocks.MockUserRepository, *mocks.MockReviewRepository)
 		expectedError bool
 		errorCode     model.ErrorCode
 		expectedUser  *model.User
@@ -24,7 +25,7 @@ func TestUserService_SetUserIsActive(t *testing.T) {
 			name:     "success activate",
 			userID:   "user1",
 			isActive: true,
-			setupMocks: func(mockTx *MockTransactor, ur *MockUserRepository, rw *MockReviewRepository) {
+			setupMocks: func(mockTx *mocks.MockTransactor, ur *mocks.MockUserRepository, rw *mocks.MockReviewRepository) {
 				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
 					Run(func(args mock.Arguments) {
 						fn := args.Get(1).(func(context.Context) error)
@@ -56,7 +57,7 @@ func TestUserService_SetUserIsActive(t *testing.T) {
 			name:     "success deactivate",
 			userID:   "user1",
 			isActive: false,
-			setupMocks: func(mockTx *MockTransactor, ur *MockUserRepository, rw *MockReviewRepository) {
+			setupMocks: func(mockTx *mocks.MockTransactor, ur *mocks.MockUserRepository, rw *mocks.MockReviewRepository) {
 				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
 					Run(func(args mock.Arguments) {
 						fn := args.Get(1).(func(context.Context) error)
@@ -88,7 +89,7 @@ func TestUserService_SetUserIsActive(t *testing.T) {
 			name:     "user not found",
 			userID:   "unknown",
 			isActive: true,
-			setupMocks: func(mockTx *MockTransactor, ur *MockUserRepository, rw *MockReviewRepository) {
+			setupMocks: func(mockTx *mocks.MockTransactor, ur *mocks.MockUserRepository, rw *mocks.MockReviewRepository) {
 				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
 					Run(func(args mock.Arguments) {
 						fn := args.Get(1).(func(context.Context) error)
@@ -103,7 +104,7 @@ func TestUserService_SetUserIsActive(t *testing.T) {
 			name:     "patch failed",
 			userID:   "user1",
 			isActive: true,
-			setupMocks: func(mockTx *MockTransactor, ur *MockUserRepository, rw *MockReviewRepository) {
+			setupMocks: func(mockTx *mocks.MockTransactor, ur *mocks.MockUserRepository, rw *mocks.MockReviewRepository) {
 				mockTx.On("WithinTransaction", mock.Anything, mock.Anything).
 					Run(func(args mock.Arguments) {
 						fn := args.Get(1).(func(context.Context) error)
@@ -118,9 +119,9 @@ func TestUserService_SetUserIsActive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockTx := new(MockTransactor)
-			mockUserRepo := new(MockUserRepository)
-			mockReviewRepo := new(MockReviewRepository)
+			mockTx := new(mocks.MockTransactor)
+			mockUserRepo := new(mocks.MockUserRepository)
+			mockReviewRepo := new(mocks.MockReviewRepository)
 
 			tt.setupMocks(mockTx, mockUserRepo, mockReviewRepo)
 
