@@ -5,6 +5,7 @@
 ```bash
 docker compose up --build
 ```
+Или вы можете опробовать сервис удаленно, он поднят на http://82.202.142.48, все эндпоинты доступны там до 4 декабря.
 
 ## Авторизация
 Для теста основных эндпоинтов, нужны токены, которые можно ставить
@@ -16,9 +17,9 @@ header: Authorization:Bearer - самый правильный вариант
 1. Плохой метод
 ```bash
 /token/generate - небезопасный метод получения токенов, не для прода точно!!
-type GenerateTokenRequest struct {
-	Type     auth.TokenType `json:"type" validate:"required,oneof=user admin"`
-	Duration time.Duration  `json:"duration" validate:"required,gt=0"`
+{
+    "type": "admin",
+    "duration": 10000000000000000
 }
 ```
 2. Рекомендую 
