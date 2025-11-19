@@ -314,7 +314,10 @@ func (p *PullRequestService) MergePullRequest(ctx context.Context, prID string) 
 		}
 
 		reviewers, err := p.prs.GetReviewers(txCtx, prID)
-		if err != nil {
+		switch {
+		case errors.Is(err, repository.ErrNotFound):
+			reviewers = []string{}
+		case err != nil:
 			l.Error("failed to get reviewers", zap.String("pull_request_id", prID), zap.Error(err))
 			return model.NewError(model.ErrorCodeUnspecified, "failed to get reviewers")
 		}

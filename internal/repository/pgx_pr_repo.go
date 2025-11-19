@@ -263,6 +263,7 @@ func (p *pgxPullRequestRepository) Patch(ctx context.Context, patch *PullRequest
 	if patch.NeedMoreReviewers != nil {
 		sets = append(sets, um.SetCol("need_more_reviewers").ToArg(*patch.NeedMoreReviewers))
 	}
+	sets = append(sets, um.SetCol("merged_at").ToArg("NOW()"))
 
 	q := psql.Update(
 		um.Table("pull_request"),
