@@ -286,7 +286,7 @@ func (p *pgxPullRequestRepository) Patch(ctx context.Context, patch *PullRequest
 		&pr.AuthorID,
 		&pr.NeedMoreReviewers,
 		&pr.CreatedAt,
-		&pr.MergedAt,
+		&pr.MergedAt, // Last time, when merged it
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
