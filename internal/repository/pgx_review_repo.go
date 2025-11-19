@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stephenafamo/bob/dialect/psql"
 	"github.com/stephenafamo/bob/dialect/psql/dm"
@@ -51,7 +52,7 @@ func (p *pgxReviewRepository) UnassignFromOpenPRs(ctx context.Context, userID st
 		return err
 	}
 	// Strange if dont use this, objects dont delete
-	if tag.Delete() {
+	if tag.RowsAffected() != 0 {
 		return nil
 	}
 	return nil

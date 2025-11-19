@@ -270,9 +270,9 @@ func (p *PullRequestService) ReassignPullRequest(ctx context.Context, prID, user
 			zap.String("pull_request_id", prID),
 			zap.String("old_reviewer", userID),
 			zap.String("new_reviewer", newReviewer))
-		
+
 		oldReviewerIndex := slices.Index(reviewers, userID)
-		slices.Replace(reviewers, oldReviewerIndex, oldReviewerIndex+1, newReviewer)
+		reviewers = slices.Replace(reviewers, oldReviewerIndex, oldReviewerIndex+1, newReviewer)
 
 		pr.ID = repoPR.ID
 		pr.CreatedAt = repoPR.CreatedAt
