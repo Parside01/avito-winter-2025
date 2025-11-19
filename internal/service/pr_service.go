@@ -3,13 +3,14 @@ package service
 import (
 	"context"
 	"errors"
+	"slices"
+	"sort"
+
 	"github.com/yakoovad/avito-winter-2025/internal/db"
 	"github.com/yakoovad/avito-winter-2025/internal/model"
 	"github.com/yakoovad/avito-winter-2025/internal/repository"
 	"github.com/yakoovad/avito-winter-2025/pkg/logger"
 	"go.uber.org/zap"
-	"slices"
-	"sort"
 )
 
 type PullRequestService struct {
@@ -326,7 +327,7 @@ func (p *PullRequestService) MergePullRequest(ctx context.Context, prID string) 
 		pr.Status = repoPR.Status
 		pr.AuthorID = repoPR.AuthorID
 		pr.Reviewers = reviewers
-
+		pr.MergedAt = repoPR.MergedAt
 		return nil
 	})
 
