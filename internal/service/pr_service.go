@@ -270,6 +270,7 @@ func (p *PullRequestService) ReassignPullRequest(ctx context.Context, prID, user
 			zap.String("old_reviewer", userID),
 			zap.String("new_reviewer", newReviewer))
 
+		pr.ID = repoPR.ID
 		pr.CreatedAt = repoPR.CreatedAt
 		pr.MergedAt = repoPR.MergedAt
 		pr.Name = repoPR.Name
